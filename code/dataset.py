@@ -16,14 +16,15 @@ def cal_distance(x1, y1, x2, y2):
     return math.sqrt((x1 - x2)**2 + (y1 - y2)**2)
 
 
+# 역할 : 사각형의 4변의 좌표를 활용하여 Text에 보다 타이트 하게 박스를 치기 위한 함수이다. 이를 통해 정확도를 개선하게 된다.
 def move_points(vertices, index1, index2, r, coef):
     '''move the two points to shrink edge
     Input:
-        vertices: vertices of text region <numpy.ndarray, (8,)>
+        vertices: vertices of text region <numpy.ndarray, (8,)>  # 4개의 점 (x,y)에 대한 정보를 가지고 있다.
         index1  : offset of point1
         index2  : offset of point2
         r       : [r1, r2, r3, r4] in paper
-        coef    : shrink ratio in paper
+        coef    : shrink ratio in paper # 축소비율 : 논문에서 나온대로라면 0.3 비율
     Output:
         vertices: vertices where one edge has been shinked
     '''
@@ -49,6 +50,7 @@ def move_points(vertices, index1, index2, r, coef):
     return vertices
 
 
+# 위의 move_points 함수에 맞게 점숟르을 축소시켜 보다 높은 정확도가 나오도록 설정한다.
 def shrink_poly(vertices, coef=0.3):
     '''shrink the text region
     Input:
@@ -79,11 +81,13 @@ def shrink_poly(vertices, coef=0.3):
     return v
 
 
+# 주어진 각도로 이미지를 회전하는 함수이다. ( 시계방향 회전 )
 def get_rotate_mat(theta):
     '''positive theta value means rotate clockwise'''
     return np.array([[math.cos(theta), -math.sin(theta)], [math.sin(theta), math.cos(theta)]])
 
 
+# 꼭짓점을 회전시킨다.
 def rotate_vertices(vertices, theta, anchor=None):
     '''rotate vertices around anchor
     Input:
@@ -101,6 +105,7 @@ def rotate_vertices(vertices, theta, anchor=None):
     return (res + anchor).T.reshape(-1)
 
 
+# 최소 경게 사각형의 좌표를 계산하는 함수이다.
 def get_boundary(vertices):
     '''get the tight boundary around given vertices
     Input:
@@ -131,6 +136,7 @@ def cal_error(vertices):
     return err
 
 
+# 폴리곤을 회전시켜 최소 크기의 경계 사각형을 얻기 위한 최젹의 각도를 찾는 함수이다. 
 def find_min_rect_angle(vertices):
     '''find the best angle to rotate poly and obtain min rectangle
     Input:
@@ -161,7 +167,7 @@ def find_min_rect_angle(vertices):
             best_index = index
     return angle_list[best_index] / 180 * math.pi
 
-
+# 이미지를 특정 위치에서 일정 크기로 자르는 경우, 이게 text와 겹치는지를 확인하는 함수이다.
 def is_cross_text(start_loc, length, vertices):
     '''check if the crop image crosses text regions
     Input:
@@ -185,6 +191,7 @@ def is_cross_text(start_loc, length, vertices):
     return False
 
 
+# 이미지를 일정 크기의 패치로 자르고, 해당 영역에 맞게 텍스트 영역의 좌표를 구하는 함수이다.
 def crop_img(img, vertices, labels, length):
     '''crop img patches to obtain batch and augment
     Input:
@@ -230,7 +237,7 @@ def crop_img(img, vertices, labels, length):
     new_vertices[:,[1,3,5,7]] -= start_h
     return region, new_vertices
 
-
+# 이미지의 모든 픽셀 좌표를 회전시켜 새로운 좌표를 계산하는 함수이다.
 def rotate_all_pixels(rotate_mat, anchor_x, anchor_y, length):
     '''get rotated locations of all pixels for next stages
     Input:
@@ -338,8 +345,8 @@ class SceneTextDataset(Dataset):
                  split='train',
                  image_size=2048,
                  crop_size=1024,
-                 ignore_under_threshold=10,
-                 drop_under_threshold=1,
+                 ignore_under_threshold=10, # 이 보다 작은 텍스트 영역을 무시하게 된다.
+                 drop_under_threshold=1, # 이 값보다 작은 텍스트 영역은 완전히 제거 한다.
                  color_jitter=True,
                  normalize=True):
         self._lang_list = ['chinese', 'japanese', 'thai', 'vietnamese']

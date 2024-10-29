@@ -113,7 +113,7 @@ def get_bboxes(score, geo, score_thresh=0.9, nms_thresh=0.2):
 def detect(model, images, input_size, map_scale=0.5):
     prep_fn = A.Compose([
         LongestMaxSize(input_size), A.PadIfNeeded(min_height=input_size, min_width=input_size,
-                                                  position=A.PadIfNeeded.PositionType.TOP_LEFT),
+                                                  position='top_left'),
         A.Normalize(), ToTensorV2()])
     device = list(model.parameters())[0].device
 
