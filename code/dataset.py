@@ -13,28 +13,20 @@ from numba import njit
 
 @njit
 def cal_distance(x1, y1, x2, y2):
-    '''유클리드 거리 계산
-    
-    입력:
-        x1, y1: 첫 번째 점의 좌표
-        x2, y2: 두 번째 점의 좌표
-    출력:
-        두 점 사이의 거리
-    '''
+    '''calculate the Euclidean distance'''
     return math.sqrt((x1 - x2)**2 + (y1 - y2)**2)
 
 @njit
 def move_points(vertices, index1, index2, r, coef):
-    '''두 점을 이동시켜 엣지를 축소
-    
-    입력:
-        vertices: 텍스트 영역의 꼭지점들 <numpy.ndarray, (8,)>
-        index1  : 첫 번째 점의 인덱스 오프셋
-        index2  : 두 번째 점의 인덱스 오프셋
-        r       : 논문에서의 [r1, r2, r3, r4]
-        coef    : 논문에서의 축소 비율
-    출력:
-        축소된 엣지를 반영한 꼭지점들 <numpy.ndarray, (8,)>
+    '''move the two points to shrink edge
+    Input:
+        vertices: vertices of text region <numpy.ndarray, (8,)>
+        index1  : offset of point1
+        index2  : offset of point2
+        r       : [r1, r2, r3, r4] in paper
+        coef    : shrink ratio in paper
+    Output:
+        vertices: vertices where one edge has been shinked
     '''
     index1 = index1 % 4
     index2 = index2 % 4
@@ -59,13 +51,12 @@ def move_points(vertices, index1, index2, r, coef):
 
 @njit
 def shrink_poly(vertices, coef=0.3):
-    '''텍스트 영역을 축소
-    
-    입력:
-        vertices: 텍스트 영역의 꼭지점들 <numpy.ndarray, (8,)>
-        coef    : 축소 비율 (기본값: 0.3)
-    출력:
-        축소된 텍스트 영역의 꼭지점들 <numpy.ndarray, (8,)>
+    '''shrink the text region
+    Input:
+        vertices: vertices of text region <numpy.ndarray, (8,)>
+        coef    : shrink ratio in paper
+    Output:
+        v       : vertices of shrinked text region <numpy.ndarray, (8,)>
     '''
     x1, y1, x2, y2, x3, y3, x4, y4 = vertices
     r1 = min(cal_distance(x1,y1,x2,y2), cal_distance(x1,y1,x4,y4))
@@ -74,12 +65,12 @@ def shrink_poly(vertices, coef=0.3):
     r4 = min(cal_distance(x4,y4,x1,y1), cal_distance(x4,y4,x3,y3))
     r = [r1, r2, r3, r4]
 
-    # move_points()를 자동으로 수행하기 위한 오프셋 결정
+    # obtain offset to perform move_points() automatically
     if cal_distance(x1,y1,x2,y2) + cal_distance(x3,y3,x4,y4) > \
        cal_distance(x2,y2,x3,y3) + cal_distance(x1,y1,x4,y4):
-        offset = 0 # 두 긴 엣지는 (x1y1-x2y2) & (x3y3-x4y4)
+        offset = 0 # two longer edges are (x1y1-x2y2) & (x3y3-x4y4)
     else:
-        offset = 1 # 두 긴 엣지는 (x2y2-x3y3) & (x4y4-x1y1)
+        offset = 1 # two longer edges are (x2y2-x3y3) & (x4y4-x1y1)
 
     v = vertices.copy()
     v = move_points(v, 0 + offset, 1 + offset, r, coef)
@@ -90,24 +81,18 @@ def shrink_poly(vertices, coef=0.3):
 
 @njit
 def get_rotate_mat(theta):
-    '''회전 행렬 생성 (양수는 시계 방향 회전)
-    
-    입력:
-        theta: 회전 각도 (라디안)
-    출력:
-        2x2 회전 행렬
-    '''
+    '''positive theta value means rotate clockwise'''
     return np.array([[math.cos(theta), -math.sin(theta)], [math.sin(theta), math.cos(theta)]])
 
+
 def rotate_vertices(vertices, theta, anchor=None):
-    '''앵커를 중심으로 꼭지점 회전
-    
-    입력:
-        vertices: 텍스트 영역의 꼭지점들 <numpy.ndarray, (8,)>
-        theta   : 회전 각도 (라디안)
-        anchor  : 회전 시 고정 위치 (기본값: None, 이미지 중심)
-    출력:
-        회전된 꼭지점들 <numpy.ndarray, (8,)>
+    '''rotate vertices around anchor
+    Input:
+        vertices: vertices of text region <numpy.ndarray, (8,)>
+        theta   : angle in radian measure
+        anchor  : fixed position during rotation
+    Output:
+        rotated vertices <numpy.ndarray, (8,)>
     '''
     v = vertices.reshape((4,2)).T
     if anchor is None:
@@ -118,12 +103,11 @@ def rotate_vertices(vertices, theta, anchor=None):
 
 @njit
 def get_boundary(vertices):
-    '''주어진 꼭지점을 포함하는 최소 경계 박스 계산
-    
-    입력:
-        vertices: 텍스트 영역의 꼭지점들 <numpy.ndarray, (8,)>
-    출력:
-        경계 박스의 최소 및 최대 x, y 값
+    '''get the tight boundary around given vertices
+    Input:
+        vertices: vertices of text region <numpy.ndarray, (8,)>
+    Output:
+        the boundary
     '''
     x1, y1, x2, y2, x3, y3, x4, y4 = vertices
     x_min = min(x1, x2, x3, x4)
@@ -134,12 +118,12 @@ def get_boundary(vertices):
 
 @njit
 def cal_error(vertices):
-    '''기본 방향과의 차이 계산 (x1y1: 좌상단, x2y2: 우상단, x3y3: 우하단, x4y4: 좌하단)
-    
-    입력:
-        vertices: 텍스트 영역의 꼭지점들 <numpy.ndarray, (8,)>
-    출력:
-        방향 차이 측정값
+    '''default orientation is x1y1 : left-top, x2y2 : right-top, x3y3 : right-bot, x4y4 : left-bot
+    calculate the difference between the vertices orientation and default orientation
+    Input:
+        vertices: vertices of text region <numpy.ndarray, (8,)>
+    Output:
+        err     : difference measure
     '''
     x_min, x_max, y_min, y_max = get_boundary(vertices)
     x1, y1, x2, y2, x3, y3, x4, y4 = vertices
@@ -149,12 +133,11 @@ def cal_error(vertices):
 
 @njit
 def find_min_rect_angle(vertices):
-    '''최소 영역을 가지는 회전 각도 찾기
-    
-    입력:
-        vertices: 텍스트 영역의 꼭지점들 <numpy.ndarray, (8,)>
-    출력:
-        최적의 회전 각도 (라디안)
+    '''find the best angle to rotate poly and obtain min rectangle
+    Input:
+        vertices: vertices of text region <numpy.ndarray, (8,)>
+    Output:
+        the best angle <radian measure>
     '''
     angle_interval = 1
     angle_list = list(range(-90, 90, angle_interval))
@@ -170,7 +153,7 @@ def find_min_rect_angle(vertices):
     min_error = float('inf')
     best_index = -1
     rank_num = 10
-    # 올바른 방향을 가진 최적의 각도 찾기
+    # find the best angle with correct orientation
     for index in sorted_area_index[:rank_num]:
         rotated = rotate_vertices(vertices, angle_list[index] / 180 * math.pi)
         temp_error = cal_error(rotated)
@@ -179,20 +162,19 @@ def find_min_rect_angle(vertices):
             best_index = index
     return angle_list[best_index] / 180 * math.pi
 
+
 def is_cross_text(start_loc, length, vertices):
-    '''크롭 이미지가 텍스트 영역과 겹치는지 확인
-    
-    입력:
-        start_loc: 크롭 시작 위치 (좌상단 좌표)
-        length   : 크롭 이미지의 길이
-        vertices : 텍스트 영역의 꼭지점들 <numpy.ndarray, (n,8)>
-    출력:
-        텍스트 영역과 겹치면 True, 아니면 False
+    '''check if the crop image crosses text regions
+    Input:
+        start_loc: left-top position
+        length   : length of crop image
+        vertices : vertices of text regions <numpy.ndarray, (n,8)>
+    Output:
+        True if crop image crosses text region
     '''
     if vertices.size == 0:
         return False
     start_w, start_h = start_loc
-    # 크롭 영역의 꼭지점 정의
     a = np.array([start_w, start_h, start_w + length, start_h, start_w + length, start_h + length,
                   start_w, start_h + length]).reshape((4, 2))
     p1 = Polygon(a).convex_hull
@@ -203,20 +185,20 @@ def is_cross_text(start_loc, length, vertices):
             return True
     return False
 
+
 def crop_img(img, vertices, labels, length):
-    '''이미지 패치를 크롭하여 배치 및 증강 수행
-    
-    입력:
-        img         : PIL 이미지
-        vertices    : 텍스트 영역의 꼭지점들 <numpy.ndarray, (n,8)>
-        labels      : 1->유효, 0->무시 <numpy.ndarray, (n,)>
-        length      : 크롭할 이미지 영역의 길이
-    출력:
-        region      : 크롭된 이미지 영역
-        new_vertices: 크롭된 영역 내의 새로운 꼭지점들
+    '''crop img patches to obtain batch and augment
+    Input:
+        img         : PIL Image
+        vertices    : vertices of text regions <numpy.ndarray, (n,8)>
+        labels      : 1->valid, 0->ignore, <numpy.ndarray, (n,)>
+        length      : length of cropped image region
+    Output:
+        region      : cropped image region
+        new_vertices: new vertices in cropped region
     '''
     h, w = img.height, img.width
-    # 이미지의 가장 짧은 변이 크롭 길이보다 작으면 크기 조정
+    # confirm the shortest side of image >= length
     if h >= w and w < length:
         img = img.resize((length, int(h * length / w)), Image.BILINEAR)
     elif h < w and h < length:
@@ -230,7 +212,7 @@ def crop_img(img, vertices, labels, length):
         new_vertices[:,[0,2,4,6]] = vertices[:,[0,2,4,6]] * ratio_w
         new_vertices[:,[1,3,5,7]] = vertices[:,[1,3,5,7]] * ratio_h
 
-    # 랜덤 위치 찾기
+    # find random position
     remain_h = img.height - length
     remain_w = img.width - length
     flag = True
@@ -251,22 +233,21 @@ def crop_img(img, vertices, labels, length):
 
 @njit
 def rotate_all_pixels(rotate_mat, anchor_x, anchor_y, length):
-    '''모든 픽셀의 회전된 위치 계산
-    
-    입력:
-        rotate_mat: 회전 행렬
-        anchor_x  : 고정된 x 위치
-        anchor_y  : 고정된 y 위치
-        length    : 이미지의 길이
-    출력:
-        rotated_x : 회전된 x 좌표들 <numpy.ndarray, (length,length)>
-        rotated_y : 회전된 y 좌표들 <numpy.ndarray, (length,length)>
+    '''get rotated locations of all pixels for next stages
+    Input:
+        rotate_mat: rotatation matrix
+        anchor_x  : fixed x position
+        anchor_y  : fixed y position
+        length    : length of image
+    Output:
+        rotated_x : rotated x positions <numpy.ndarray, (length,length)>
+        rotated_y : rotated y positions <numpy.ndarray, (length,length)>
     '''
     x = np.arange(length)
     y = np.arange(length)
     x, y = np.meshgrid(x, y)
     x_lin = x.reshape((1, x.size))
-    y_lin = y.reshape((1, y.size))
+    y_lin = y.reshape((1, x.size))
     coord_mat = np.concatenate((x_lin, y_lin), 0)
     rotated_coord = np.dot(rotate_mat, coord_mat - np.array([[anchor_x], [anchor_y]])) + \
                                                    np.array([[anchor_x], [anchor_y]])
@@ -274,17 +255,8 @@ def rotate_all_pixels(rotate_mat, anchor_x, anchor_y, length):
     rotated_y = rotated_coord[1, :].reshape(y.shape)
     return rotated_x, rotated_y
 
+
 def resize_img(img, vertices, size):
-    '''이미지 크기 조정
-    
-    입력:
-        img      : PIL 이미지
-        vertices : 텍스트 영역의 꼭지점들 <numpy.ndarray, (n,8)>
-        size     : 조정할 최대 크기
-    출력:
-        img         : 크기 조정된 PIL 이미지
-        new_vertices: 크기 조정된 꼭지점들
-    '''
     h, w = img.height, img.width
     ratio = size / max(h, w)
     if w > h:
@@ -294,16 +266,16 @@ def resize_img(img, vertices, size):
     new_vertices = vertices * ratio
     return img, new_vertices
 
+
 def adjust_height(img, vertices, ratio=0.2):
-    '''데이터 증강을 위한 이미지 높이 조정
-    
-    입력:
-        img         : PIL 이미지
-        vertices    : 텍스트 영역의 꼭지점들 <numpy.ndarray, (n,8)>
-        ratio       : 높이 변경 비율 [0.8, 1.2] 범위
-    출력:
-        img         : 높이가 조정된 PIL 이미지
-        new_vertices: 높이가 조정된 꼭지점들
+    '''adjust height of image to aug data
+    Input:
+        img         : PIL Image
+        vertices    : vertices of text regions <numpy.ndarray, (n,8)>
+        ratio       : height changes in [0.8, 1.2]
+    Output:
+        img         : adjusted PIL Image
+        new_vertices: adjusted vertices
     '''
     ratio_h = 1 + ratio * (np.random.rand() * 2 - 1)
     old_h = img.height
@@ -315,16 +287,16 @@ def adjust_height(img, vertices, ratio=0.2):
         new_vertices[:,[1,3,5,7]] = vertices[:,[1,3,5,7]] * (new_h / old_h)
     return img, new_vertices
 
+
 def rotate_img(img, vertices, angle_range=10):
-    '''이미지 회전하여 데이터 증강
-    
-    입력:
-        img         : PIL 이미지
-        vertices    : 텍스트 영역의 꼭지점들 <numpy.ndarray, (n,8)>
-        angle_range : 회전 범위 (기본값: ±10도)
-    출력:
-        img         : 회전된 PIL 이미지
-        new_vertices: 회전된 꼭지점들
+    '''rotate image [-10, 10] degree to aug data
+    Input:
+        img         : PIL Image
+        vertices    : vertices of text regions <numpy.ndarray, (n,8)>
+        angle_range : rotate range
+    Output:
+        img         : rotated PIL Image
+        new_vertices: rotated vertices
     '''
     center_x = (img.width - 1) / 2
     center_y = (img.height - 1) / 2
@@ -335,16 +307,8 @@ def rotate_img(img, vertices, angle_range=10):
         new_vertices[i,:] = rotate_vertices(vertice, -angle / 180 * math.pi, np.array([[center_x],[center_y]]))
     return img, new_vertices
 
+
 def generate_roi_mask(image, vertices, labels):
-    '''ROI 마스크 생성
-    
-    입력:
-        image    : 이미지 배열
-        vertices : 텍스트 영역의 꼭지점들 <numpy.ndarray, (n,8)>
-        labels   : 각 텍스트 영역의 레이블 (1: 유효, 0: 무시)
-    출력:
-        마스크 이미지 (무시할 영역은 0, 나머지는 1)
-    '''
     mask = np.ones(image.shape[:2], dtype=np.float32)
     ignored_polys = []
     for vertice, label in zip(vertices, labels):
@@ -353,17 +317,8 @@ def generate_roi_mask(image, vertices, labels):
     cv2.fillPoly(mask, ignored_polys, 0)
     return mask
 
+
 def filter_vertices(vertices, labels, ignore_under=0, drop_under=0):
-    '''텍스트 영역 필터링
-    
-    입력:
-        vertices        : 텍스트 영역의 꼭지점들 <numpy.ndarray, (n,8)>
-        labels          : 각 텍스트 영역의 레이블 <numpy.ndarray, (n,)>
-        ignore_under    : 무시할 최소 영역 크기
-        drop_under      : 제거할 최소 영역 크기
-    출력:
-        필터링된 꼭지점들과 레이블들
-    '''
     if drop_under == 0 and ignore_under == 0:
         return vertices, labels
 
@@ -378,11 +333,8 @@ def filter_vertices(vertices, labels, ignore_under=0, drop_under=0):
 
     return new_vertices, new_labels
 
+
 class SceneTextDataset(Dataset):
-    """Scene Text Dataset 클래스
-    
-    데이터셋을 로드하고 전처리, 증강을 수행합니다.
-    """
     def __init__(self, root_dir,
                  split='train',
                  image_size=2048,
@@ -391,26 +343,12 @@ class SceneTextDataset(Dataset):
                  drop_under_threshold=1,
                  color_jitter=True,
                  normalize=True):
-        """
-        초기화 함수
-
-        입력:
-            root_dir               : 데이터셋의 루트 디렉토리
-            split                  : 데이터 분할 ('train', 'val', 'test' 등)
-            image_size             : 이미지의 최대 크기
-            crop_size              : 크롭할 이미지의 크기
-            ignore_under_threshold : 무시할 최소 영역 크기
-            drop_under_threshold   : 제거할 최소 영역 크기
-            color_jitter           : 컬러 지터링 적용 여부
-            normalize              : 정규화 적용 여부
-        """
-        self._lang_list = ['chinese', 'japanese', 'thai', 'vietnamese']
+        self._lang_list = ['chinese', 'japanese', 'thai', 'vietnamese','english']
         self.root_dir = root_dir
         self.split = split
         total_anno = dict(images=dict())
         for nation in self._lang_list:
-            anno_path = osp.join(root_dir, f'{nation}_receipt/ufo/{split}.json')
-            with open(anno_path, 'r', encoding='utf-8') as f:
+            with open(osp.join(root_dir, '{}_receipt/ufo/{}.json'.format(nation, split)), 'r', encoding='utf-8') as f:
                 anno = json.load(f)
             for im in anno['images']:
                 total_anno['images'][im] = anno['images'][im]
@@ -425,13 +363,6 @@ class SceneTextDataset(Dataset):
         self.ignore_under_threshold = ignore_under_threshold
 
     def _infer_dir(self, fname):
-        '''파일 이름으로부터 이미지 디렉토리 추론
-        
-        입력:
-            fname: 이미지 파일 이름
-        출력:
-            이미지가 저장된 디렉토리 경로
-        '''
         lang_indicator = fname.split('.')[1]
         if lang_indicator == 'zh':
             lang = 'chinese'
@@ -442,23 +373,12 @@ class SceneTextDataset(Dataset):
         elif lang_indicator == 'vi':
             lang = 'vietnamese'
         else:
-            raise ValueError("알 수 없는 언어 지시자")
+            raise ValueError
         return osp.join(self.root_dir, f'{lang}_receipt', 'img', self.split)
-
     def __len__(self):
-        '''데이터셋의 크기 반환'''
         return len(self.image_fnames)
 
     def __getitem__(self, idx):
-        '''데이터셋의 특정 인덱스에 해당하는 데이터를 반환
-        
-        입력:
-            idx: 데이터 인덱스
-        출력:
-            image      : 전처리된 이미지 배열
-            word_bboxes: 단어의 바운딩 박스 <numpy.ndarray, (n,4,2)>
-            roi_mask   : ROI 마스크
-        '''
         image_fname = self.image_fnames[idx]
         image_fpath = osp.join(self._infer_dir(image_fname), image_fname)
 
@@ -500,4 +420,3 @@ class SceneTextDataset(Dataset):
         roi_mask = generate_roi_mask(image, vertices, labels)
 
         return image, word_bboxes, roi_mask
-
