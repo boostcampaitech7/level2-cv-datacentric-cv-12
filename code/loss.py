@@ -31,7 +31,9 @@ class EASTLoss(nn.Module):
         if torch.sum(gt_score) < 1:
             return torch.sum(pred_score + pred_geo) * 0, dict(cls_loss=None, angle_loss=None, iou_loss=None)
 
+        # Loss for Score Map
         classify_loss = get_dice_loss(gt_score, pred_score * roi_mask)
+        # Loss for Geometric Map
         iou_loss_map, angle_loss_map = get_geo_loss(gt_geo, pred_geo)
 
         angle_loss = torch.sum(angle_loss_map * gt_score) / torch.sum(gt_score)

@@ -4,8 +4,104 @@ import torch
 import numpy as np
 import cv2
 from torch.utils.data import Dataset
+from numba import njit
 
+@njit
+def nb_meshgrid(x, y):
+    # Get the number of rows and columns
+    rows = len(y)
+    cols = len(x)
 
+    # Pre-allocate empty arrays
+    X = np.empty((rows, cols), dtype=x.dtype)
+    Y = np.empty((rows, cols), dtype=y.dtype)
+
+    # Fill the X array: repeat x along rows
+    for i in range(rows):
+        for j in range(cols):
+            X[i, j] = x[j]
+
+    # Fill the Y array: repeat y along columns
+    for i in range(rows):
+        for j in range(cols):
+            Y[i, j] = y[i]
+
+    return X, Y
+
+@njit
+def nb_amin(arr, axis=0):
+    # Check the shape of the input array
+    rows, cols = arr.shape
+    
+    # If axis=0, find the minimum along columns (i.e., compare across rows)
+    if axis == 0:
+        # Initialize the result array to store the minimum values
+        min_vals = np.empty(cols, dtype=arr.dtype)
+
+        # Loop through each column
+        for j in range(cols):
+            # Set the first element of the column as the initial minimum
+            min_val = arr[0, j]
+
+            # Compare each element in the column with the current minimum
+            for i in range(1, rows):
+                if arr[i, j] < min_val:
+                    min_val = arr[i, j]
+
+            # Store the minimum value for this column
+            min_vals[j] = min_val
+
+        return min_vals
+
+@njit
+def nb_amax(arr, axis=0):
+    # Check the shape of the input array
+    rows, cols = arr.shape
+
+    # If axis=0, find the maximum along columns (i.e., compare across rows)
+    if axis == 0:
+        # Initialize the result array to store the maximum values
+        max_vals = np.empty(cols, dtype=arr.dtype)
+
+        # Loop through each column
+        for j in range(cols):
+            # Set the first element of the column as the initial maximum
+            max_val = arr[0, j]
+
+            # Compare each element in the column with the current maximum
+            for i in range(1, rows):
+                if arr[i, j] > max_val:
+                    max_val = arr[i, j]
+
+            # Store the maximum value for this column
+            max_vals[j] = max_val
+
+        return max_vals
+    
+@njit
+def nb_norm(arr,axis=0):
+    rows, cols = arr.shape
+    norms = np.zeros(cols, dtype=np.float64)
+    for j in range(cols):
+        col_vector = arr[:, j]
+        norms[j] = np.linalg.norm(col_vector)
+    return norms
+
+@njit
+def get_rotated_coords(h, w, theta, anchor):
+    anchor = anchor.reshape(2, 1)
+    rotate_mat = get_rotate_mat(theta)
+    x, y = nb_meshgrid(np.arange(w), np.arange(h))
+    # x, y = np.meshgrid(np.arange(w), np.arange(h))
+    x_lin = x.reshape((1, x.size))
+    y_lin = y.reshape((1, x.size))
+    coord_mat = np.concatenate((x_lin, y_lin), 0)
+    rotated_coord = np.dot(rotate_mat, coord_mat - anchor) + anchor
+    rotated_x = rotated_coord[0, :].reshape(x.shape)
+    rotated_y = rotated_coord[1, :].reshape(y.shape)
+    return rotated_x, rotated_y
+
+@njit
 def shrink_bbox(bbox, coef=0.3, inplace=False):
     lens = [np.linalg.norm(bbox[i] - bbox[(i + 1) % 4], ord=2) for i in range(4)]
     r = [min(lens[(i - 1) % 4], lens[i]) for i in range(4)]
@@ -24,8 +120,8 @@ def shrink_bbox(bbox, coef=0.3, inplace=False):
         bbox[p2_idx] -= p1p2 / dist * r[p2_idx] * coef
     return bbox
 
-
-def get_rotated_coords(h, w, theta, anchor):
+@njit
+def get_rotated_coords_(h, w, theta, anchor):
     anchor = anchor.reshape(2, 1)
     rotate_mat = get_rotate_mat(theta)
     x, y = np.meshgrid(np.arange(w), np.arange(h))
@@ -37,24 +133,24 @@ def get_rotated_coords(h, w, theta, anchor):
     rotated_y = rotated_coord[1, :].reshape(y.shape)
     return rotated_x, rotated_y
 
-
+@njit
 def get_rotate_mat(theta):
     return np.array([[math.cos(theta), -math.sin(theta)],
                      [math.sin(theta), math.cos(theta)]])
 
-
+@njit
 def calc_error_from_rect(bbox):
     '''
     Calculate the difference between the vertices orientation and default orientation. Default
     orientation is x1y1 : left-top, x2y2 : right-top, x3y3 : right-bot, x4y4 : left-bot
     '''
-    x_min, y_min = np.min(bbox, axis=0)
-    x_max, y_max = np.max(bbox, axis=0)
+    x_min, y_min = nb_amin(bbox, axis=0)
+    x_max, y_max = nb_amax(bbox, axis=0)
     rect = np.array([[x_min, y_min], [x_max, y_min], [x_max, y_max], [x_min, y_max]],
                     dtype=np.float32)
-    return np.linalg.norm(bbox - rect, axis=0).sum()
+    return nb_norm(bbox - rect, axis=0).sum()
 
-
+@njit
 def rotate_bbox(bbox, theta, anchor=None):
     points = bbox.T
     if anchor is None:
@@ -70,8 +166,8 @@ def find_min_rect_angle(bbox, rank_num=10):
     angles = np.arange(-90, 90) / 180 * math.pi
     for theta in angles:
         rotated_bbox = rotate_bbox(bbox, theta)
-        x_min, y_min = np.min(rotated_bbox, axis=0)
-        x_max, y_max = np.max(rotated_bbox, axis=0)
+        x_min, y_min = nb_amin(rotated_bbox, axis=0)
+        x_max, y_max = nb_amax(rotated_bbox, axis=0)
         areas.append((x_max - x_min) * (y_max - y_min))
 
     best_angle, min_error = -1, float('inf')
@@ -103,8 +199,8 @@ def generate_score_geo_maps(image, word_bboxes, map_scale=0.5):
 
         theta = find_min_rect_angle(bbox)
         rotated_bbox = rotate_bbox(bbox, theta) * map_scale
-        x_min, y_min = np.min(rotated_bbox, axis=0)
-        x_max, y_max = np.max(rotated_bbox, axis=0)
+        x_min, y_min = nb_amin(rotated_bbox, axis=0)
+        x_max, y_max = nb_amax(rotated_bbox, axis=0)
 
         anchor = bbox[0] * map_scale
         rotated_x, rotated_y = get_rotated_coords(map_h, map_w, theta, anchor)
