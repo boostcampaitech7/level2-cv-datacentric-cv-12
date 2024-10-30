@@ -343,7 +343,7 @@ class SceneTextDataset(Dataset):
                  drop_under_threshold=1,
                  color_jitter=True,
                  normalize=True):
-        self._lang_list = ['chinese', 'japanese', 'thai', 'vietnamese']
+        self._lang_list = ['kor', 'chinese', 'japanese', 'thai', 'vietnamese']
         self.root_dir = root_dir
         self.split = split
         total_anno = dict(images=dict())
@@ -364,7 +364,10 @@ class SceneTextDataset(Dataset):
 
     def _infer_dir(self, fname):
         lang_indicator = fname.split('.')[1]
-        if lang_indicator == 'zh':
+
+        if lang_indicator == 'new':
+            lang = 'kor' 
+        elif lang_indicator == 'zh':
             lang = 'chinese'
         elif lang_indicator == 'ja':
             lang = 'japanese'
@@ -372,6 +375,7 @@ class SceneTextDataset(Dataset):
             lang = 'thai'
         elif lang_indicator == 'vi':
             lang = 'vietnamese'
+
         else:
             raise ValueError
         return osp.join(self.root_dir, f'{lang}_receipt', 'img', self.split)
