@@ -7,7 +7,7 @@ from glob import glob
 import torch
 import cv2
 from torch import cuda
-from model import EAST
+from code.models.model import EAST
 from tqdm import tqdm
 
 from detect import detect

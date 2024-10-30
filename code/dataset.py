@@ -372,9 +372,12 @@ class SceneTextDataset(Dataset):
             lang = 'thai'
         elif lang_indicator == 'vi':
             lang = 'vietnamese'
+        elif lang_indicator == 'en':
+            lang = 'english'
         else:
-            raise ValueError
+            raise ValueError(f"Unsupported language indicator: {lang_indicator}")
         return osp.join(self.root_dir, f'{lang}_receipt', 'img', self.split)
+
     def __len__(self):
         return len(self.image_fnames)
 
