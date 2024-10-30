@@ -15,87 +15,85 @@ from east_dataset import EASTDataset
 from dataset import SceneTextDataset
 from model import EAST
 
+
+# 체크포인트 파일의 확장자 리스트
+CHECKPOINT_EXTENSIONS = ['.pth', '.ckpt']
+# 지원하는 언어 리스트
+LANGUAGE_LIST = ['chinese', 'japanese', 'thai', 'vietnamese']
+
+
 def parse_args():
     """
-    Parses command-line arguments for configuring the training process.
+    명령줄 인자를 파싱하여 반환합니다.
 
-    Returns:
-        argparse.Namespace: Parsed arguments with default values if not provided.
-    
-    Raises:
-        ValueError: If `input_size` is not a multiple of 32.
+    반환:
+        argparse.Namespace: 파싱된 인자를 포함하는 네임스페이스 객체
     """
     parser = ArgumentParser()
 
-    # Data and model directories with environment variable defaults
+    # 일반적인 인자들 설정
     parser.add_argument('--data_dir', type=str,
                         default=os.environ.get('SM_CHANNEL_TRAIN', 'data'),
-                        help='Directory containing training data.')
+                        help='학습 데이터가 저장된 디렉토리 경로')
     parser.add_argument('--model_dir', type=str, default=os.environ.get('SM_MODEL_DIR',
                                                                         'trained_models'),
-                        help='Directory to save trained models.')
+                        help='모델 체크포인트를 저장할 디렉토리 경로')
 
-    # Device configuration: use CUDA if available, else CPU
     parser.add_argument('--device', default='cuda' if cuda.is_available() else 'cpu',
-                        help='Device to use for training (cuda or cpu).')
+                        help='모델을 실행할 디바이스 (cuda 또는 cpu)')
     parser.add_argument('--num_workers', type=int, default=8,
-                        help='Number of worker processes for data loading.')
+                        help='데이터 로딩 시 사용할 워커 수')
 
-    # Model and training hyperparameters
     parser.add_argument('--image_size', type=int, default=2048,
-                        help='Size of the input images.')
+                        help='원본 이미지의 크기')
     parser.add_argument('--input_size', type=int, default=1024,
-                        help='Size of the cropped input for the model.')
+                        help='모델 입력 이미지의 크기 (32의 배수여야 함)')
     parser.add_argument('--batch_size', type=int, default=8,
-                        help='Number of samples per training batch.')
+                        help='한 번에 처리할 배치 크기')
     parser.add_argument('--learning_rate', type=float, default=1e-3,
-                        help='Learning rate for the optimizer.')
+                        help='학습률')
     parser.add_argument('--max_epoch', type=int, default=150,
-                        help='Maximum number of training epochs.')
+                        help='최대 에포크 수')
     parser.add_argument('--save_interval', type=int, default=5,
-                        help='Interval (in epochs) to save the model checkpoint.')
-    
+                        help='모델 체크포인트를 저장할 에포크 간격')
+
     args = parser.parse_args()
 
-    # Ensure input_size is a multiple of 32 for the EAST model
+    # input_size가 32의 배수가 아닌 경우 오류 발생
     if args.input_size % 32 != 0:
-        raise ValueError('`input_size` must be a multiple of 32')
+        raise ValueError('`input_size`는 32의 배수여야 합니다.')
 
     return args
 
 
 def do_training(data_dir, model_dir, device, image_size, input_size, num_workers, batch_size,
-               learning_rate, max_epoch, save_interval):
+                learning_rate, max_epoch, save_interval):
     """
-    Executes the training loop for the EAST model on scene text detection.
+    EAST 모델을 학습하는 함수입니다.
 
-    Args:
-        data_dir (str): Directory containing the training data.
-        model_dir (str): Directory to save trained model checkpoints.
-        device (str): Device to perform computations on ('cuda' or 'cpu').
-        image_size (int): Size of the input images.
-        input_size (int): Size of the cropped input for the model.
-        num_workers (int): Number of worker processes for data loading.
-        batch_size (int): Number of samples per training batch.
-        learning_rate (float): Learning rate for the optimizer.
-        max_epoch (int): Maximum number of training epochs.
-        save_interval (int): Interval (in epochs) to save the model checkpoint.
+    입력:
+        data_dir (str): 학습 데이터가 저장된 디렉토리 경로
+        model_dir (str): 모델 체크포인트를 저장할 디렉토리 경로
+        device (str): 학습에 사용할 디바이스 ('cuda' 또는 'cpu')
+        image_size (int): 원본 이미지의 크기
+        input_size (int): 모델 입력 이미지의 크기
+        num_workers (int): 데이터 로딩 시 사용할 워커 수
+        batch_size (int): 한 번에 처리할 배치 크기
+        learning_rate (float): 학습률
+        max_epoch (int): 최대 에포크 수
+        save_interval (int): 모델 체크포인트를 저장할 에포크 간격
     """
-    # Initialize the dataset for training
+    # 데이터셋 생성
     dataset = SceneTextDataset(
-        data_dir=data_dir,
+        data_dir,
         split='train',
         image_size=image_size,
         crop_size=input_size,
     )
-    
-    # Wrap the dataset with EAST-specific preprocessing
+    # EASTDataset으로 래핑
     dataset = EASTDataset(dataset)
-    
-    # Calculate the total number of batches per epoch
-    num_batches = math.ceil(len(dataset) / batch_size)
-    
-    # Create a DataLoader for batching and shuffling the data
+    num_batches = math.ceil(len(dataset) / batch_size)  # 총 배치 수 계산
+    # 데이터로더 생성
     train_loader = DataLoader(
         dataset,
         batch_size=batch_size,
@@ -103,76 +101,72 @@ def do_training(data_dir, model_dir, device, image_size, input_size, num_workers
         num_workers=num_workers
     )
 
-    # Set the device for computation
+    # 디바이스 설정
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    
-    # Initialize the EAST model and move it to the specified device
+    # 모델 초기화 및 디바이스로 이동
     model = EAST()
     model.to(device)
-    
-    # Define the optimizer (Adam) and the learning rate scheduler
+    # 옵티마이저 설정 (Adam 사용)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    # 학습률 스케줄러 설정 (에포크 절반 지점에서 학습률 0.1배 감소)
     scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[max_epoch // 2], gamma=0.1)
 
-    # Set the model to training mode
-    model.train()
-    
-    # Iterate over each epoch
+    model.train()  # 모델을 학습 모드로 설정
     for epoch in range(max_epoch):
-        epoch_loss = 0  # Accumulates the total loss for the epoch
-        epoch_start = time.time()  # Record the start time of the epoch
-        
-        # Initialize a progress bar for the current epoch
+        epoch_loss, epoch_start = 0, time.time()  # 에포크 손실 초기화 및 시작 시간 기록
+        # tqdm을 사용하여 진행 상황 표시
         with tqdm(total=num_batches) as pbar:
-            pbar.set_description(f'[Epoch {epoch + 1}]')  # Set the epoch description
-
-            # Iterate over batches in the DataLoader
             for img, gt_score_map, gt_geo_map, roi_mask in train_loader:
-                # Forward and backward pass through the model
+                pbar.set_description('[Epoch {}]'.format(epoch + 1))  # 현재 에포크 표시
+
+                # 학습 단계에서 손실 계산
                 loss, extra_info = model.train_step(img, gt_score_map, gt_geo_map, roi_mask)
-                
-                optimizer.zero_grad()  # Reset gradients
-                loss.backward()        # Backpropagate the loss
-                optimizer.step()       # Update model parameters
+                optimizer.zero_grad()  # 옵티마이저의 기울기 초기화
+                loss.backward()        # 역전파 수행
+                optimizer.step()       # 옵티마이저 업데이트
 
-                loss_val = loss.item()  # Get the scalar loss value
-                epoch_loss += loss_val  # Accumulate the loss
+                loss_val = loss.item()
+                epoch_loss += loss_val  # 에포크 손실에 현재 배치 손실 추가
 
-                pbar.update(1)  # Update the progress bar
-
-                # Prepare additional metrics for display
+                pbar.update(1)  # 진행 바 업데이트
                 val_dict = {
-                    'Cls loss': extra_info['cls_loss'],
+                    'Cls loss': extra_info['cls_loss'], 
                     'Angle loss': extra_info['angle_loss'],
                     'IoU loss': extra_info['iou_loss']
                 }
-                pbar.set_postfix(val_dict)  # Update progress bar with metrics
+                pbar.set_postfix(val_dict)  # 손실 값 표시
 
-        scheduler.step()  # Update the learning rate scheduler
+        scheduler.step()  # 학습률 스케줄러 업데이트
 
-        # Calculate and display the mean loss and elapsed time for the epoch
+        # 에포크 종료 후 평균 손실과 소요 시간 출력
         print('Mean loss: {:.4f} | Elapsed time: {}'.format(
             epoch_loss / num_batches, timedelta(seconds=time.time() - epoch_start)))
-        
-        # Save the model checkpoint at specified intervals
+
+        # 지정된 간격마다 모델 체크포인트 저장
         if (epoch + 1) % save_interval == 0:
             if not osp.exists(model_dir):
-                os.makedirs(model_dir)  # Create the model directory if it doesn't exist
+                os.makedirs(model_dir)
 
-            ckpt_fpath = osp.join(model_dir, 'latest.pth')  # Define the checkpoint file path
-            torch.save(model.state_dict(), ckpt_fpath)  # Save the model state
+            ckpt_fpath = osp.join(model_dir, 'latest.pth')
+            torch.save(model.state_dict(), ckpt_fpath)
+            print(f'Model checkpoint saved at epoch {epoch + 1} to {ckpt_fpath}')
 
 
 def main(args):
     """
-    The main function to start the training process with parsed arguments.
+    메인 함수. 인자로 받은 설정을 바탕으로 학습을 수행합니다.
 
-    Args:
-        args (argparse.Namespace): Parsed command-line arguments.
+    입력:
+        args (argparse.Namespace): 파싱된 명령줄 인자
     """
-    do_training(**args.__dict__)  # Unpack arguments and pass to do_training
+    do_training(**args.__dict__)  # 인자를 해체하여 do_training 함수에 전달
 
 
 if __name__ == '__main__':
-    args = parse_args()  # Parse command-line arguments
-    main(args)           # Start the training process
+    """
+    스크립트의 진입점입니다.
+    
+    명령줄 인자를 파싱하고, 메인 함수를 호출하여 학습을 시작합니다.
+    """
+    args = parse_args()
+    main(args)

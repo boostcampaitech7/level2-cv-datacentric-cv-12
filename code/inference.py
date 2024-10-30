@@ -12,97 +12,88 @@ from tqdm import tqdm
 
 from detect import detect
 
-# Define acceptable checkpoint file extensions
-CHECKPOINT_EXTENSIONS = ['.pth', '.ckpt']
 
-# List of supported languages for processing
+# 체크포인트 파일 확장자 리스트
+CHECKPOINT_EXTENSIONS = ['.pth', '.ckpt']
+# 지원하는 언어 리스트
 LANGUAGE_LIST = ['chinese', 'japanese', 'thai', 'vietnamese']
 
 
 def parse_args():
     """
-    Parses command-line arguments for configuring the inference process.
-
-    Returns:
-        argparse.Namespace: Parsed arguments with default values if not provided.
-
-    Raises:
-        ValueError: If `input_size` is not a multiple of 32.
+    명령줄 인자를 파싱하여 반환합니다.
+    
+    반환:
+        argparse.Namespace: 파싱된 인자를 포함하는 네임스페이스 객체
     """
     parser = ArgumentParser()
 
-    # Directories for data, model, and output
+    # 기본 인자들 설정
     parser.add_argument('--data_dir', default=os.environ.get('SM_CHANNEL_EVAL', 'data'),
-                        help='Directory containing evaluation data.')
+                        help='평가 데이터가 저장된 디렉토리 경로')
     parser.add_argument('--model_dir', default=os.environ.get('SM_CHANNEL_MODEL', 'trained_models'),
-                        help='Directory containing trained model checkpoints.')
+                        help='모델 체크포인트가 저장된 디렉토리 경로')
     parser.add_argument('--output_dir', default=os.environ.get('SM_OUTPUT_DATA_DIR', 'predictions'),
-                        help='Directory to save inference predictions.')
+                        help='예측 결과를 저장할 디렉토리 경로')
 
-    # Device configuration: use CUDA if available, else CPU
     parser.add_argument('--device', default='cuda' if cuda.is_available() else 'cpu',
-                        help='Device to use for inference (cuda or cpu).')
+                        help='모델을 실행할 디바이스 (cuda 또는 cpu)')
     parser.add_argument('--input_size', type=int, default=2048,
-                        help='Size of the input images for the model.')
+                        help='모델 입력 이미지의 크기 (32의 배수여야 함)')
     parser.add_argument('--batch_size', type=int, default=5,
-                        help='Number of images to process in a batch.')
+                        help='한 번에 처리할 배치 크기')
 
     args = parser.parse_args()
 
-    # Ensure input_size is a multiple of 32 for the EAST model
+    # input_size가 32의 배수가 아닌 경우 오류 발생
     if args.input_size % 32 != 0:
-        raise ValueError('`input_size` must be a multiple of 32')
+        raise ValueError('`input_size`는 32의 배수여야 합니다.')
 
     return args
 
 
 def do_inference(model, ckpt_fpath, data_dir, input_size, batch_size, split='test'):
     """
-    Performs inference using the EAST model on a given dataset split.
-
-    Args:
-        model (torch.nn.Module): The EAST model instance.
-        ckpt_fpath (str): File path to the model checkpoint.
-        data_dir (str): Directory containing the evaluation data.
-        input_size (int): Size of the input images for the model.
-        batch_size (int): Number of images to process in a batch.
-        split (str, optional): Dataset split to process (e.g., 'test'). Defaults to 'test'.
-
-    Returns:
-        dict: A dictionary containing image filenames and their corresponding detected bounding boxes.
+    모델을 사용하여 주어진 데이터셋에 대한 추론을 수행합니다.
+    
+    입력:
+        model (torch.nn.Module): EAST 모델 인스턴스
+        ckpt_fpath (str): 모델 체크포인트 파일 경로
+        data_dir (str): 이미지 데이터가 저장된 디렉토리 경로
+        input_size (int): 모델 입력 이미지의 크기
+        batch_size (int): 한 번에 처리할 배치 크기
+        split (str, optional): 데이터셋 분할 ('test' 등). 기본값은 'test'
+    
+    출력:
+        dict: 예측된 바운딩 박스를 포함하는 UFO 형식의 결과 딕셔너리
     """
-    # Load the model's state dictionary from the checkpoint
+    # 체크포인트 파일 로드
     model.load_state_dict(torch.load(ckpt_fpath, map_location='cpu'))
-    model.eval()  # Set the model to evaluation mode
+    model.eval()
 
-    image_fnames, by_sample_bboxes = [], []  # Lists to store image filenames and bounding boxes
+    image_fnames, by_sample_bboxes = [], []
 
-    images = []  # List to accumulate images for batch processing
+    images = []
+    
+    # 모든 지원 언어에 대해 이미지 파일 경로 수집
+    for image_fpath in tqdm(sum([glob(osp.join(data_dir, f'{lang}_receipt/img/{split}/*')) for lang in LANGUAGE_LIST], [])):
+        image_fnames.append(osp.basename(image_fpath))
 
-    # Iterate over all image file paths for the specified languages and split
-    for image_fpath in tqdm(
-            sum([glob(osp.join(data_dir, f'{lang}_receipt/img/{split}/*')) for lang in LANGUAGE_LIST], []),
-            desc='Processing images'
-    ):
-        image_fnames.append(osp.basename(image_fpath))  # Extract and store the image filename
-
-        # Read the image using OpenCV and convert from BGR to RGB
+        # 이미지를 BGR에서 RGB로 변환하여 읽기
         images.append(cv2.imread(image_fpath)[:, :, ::-1])
-
-        # If the batch is full, perform detection
         if len(images) == batch_size:
-            # Detect bounding boxes for the current batch of images
+            # 배치 단위로 감지 수행
             by_sample_bboxes.extend(detect(model, images, input_size))
-            images = []  # Reset the images list for the next batch
+            images = []
 
-    # Process any remaining images that didn't fill a complete batch
+    # 남아있는 이미지에 대해 감지 수행
     if len(images):
         by_sample_bboxes.extend(detect(model, images, input_size))
 
-    # Prepare the result dictionary in UFO (Universal Format for Objects) structure
+    # UFO 형식의 결과 딕셔너리 초기화
     ufo_result = dict(images=dict())
     for image_fname, bboxes in zip(image_fnames, by_sample_bboxes):
-        # For each bounding box, assign an index and convert it to a list
+        # 각 이미지에 대해 바운딩 박스를 포인트 리스트로 변환
         words_info = {idx: dict(points=bbox.tolist()) for idx, bbox in enumerate(bboxes)}
         ufo_result['images'][image_fname] = dict(words=words_info)
 
@@ -111,47 +102,35 @@ def do_inference(model, ckpt_fpath, data_dir, input_size, batch_size, split='tes
 
 def main(args):
     """
-    The main function to execute the inference process.
-
-    Args:
-        args (argparse.Namespace): Parsed command-line arguments.
+    메인 함수. 모델 초기화 및 추론을 수행하고 결과를 저장합니다.
+    
+    입력:
+        args (argparse.Namespace): 파싱된 명령줄 인자
     """
-    # Initialize the EAST model without pretraining
+    # 모델 초기화 및 디바이스로 이동
     model = EAST(pretrained=False).to(args.device)
 
-    # Define the path to the latest checkpoint file
+    # 체크포인트 파일 경로 설정
     ckpt_fpath = osp.join(args.model_dir, 'latest.pth')
 
-    # Create the output directory if it doesn't exist
+    # 출력 디렉토리가 존재하지 않으면 생성
     if not osp.exists(args.output_dir):
         os.makedirs(args.output_dir)
 
-    print('Inference in progress...')
+    print('Inference in progress')
 
-    # Perform inference on the 'test' split of the dataset
-    split_result = do_inference(
-        model=model,
-        ckpt_fpath=ckpt_fpath,
-        data_dir=args.data_dir,
-        input_size=args.input_size,
-        batch_size=args.batch_size,
-        split='test'
-    )
-
-    # Initialize the final result dictionary
+    # 추론 수행
     ufo_result = dict(images=dict())
+    split_result = do_inference(model, ckpt_fpath, args.data_dir, args.input_size,
+                                args.batch_size, split='test')
     ufo_result['images'].update(split_result['images'])
 
-    # Define the output filename
-    output_fname = 'output.csv'
-
-    # Save the inference results as a JSON file
+    # 결과를 JSON 파일로 저장
+    output_fname = 'output.json'
     with open(osp.join(args.output_dir, output_fname), 'w') as f:
         json.dump(ufo_result, f, indent=4)
 
-    print(f'Inference completed. Results saved to {osp.join(args.output_dir, output_fname)}')
-
 
 if __name__ == '__main__':
-    args = parse_args()  # Parse command-line arguments
-    main(args)           # Execute the inference process
+    args = parse_args()
+    main(args)
