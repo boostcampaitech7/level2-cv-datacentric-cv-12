@@ -9,22 +9,22 @@ import cv2
 import albumentations as A
 from torch.utils.data import Dataset
 from shapely.geometry import Polygon
+from numba import njit
 
-
+@njit
 def cal_distance(x1, y1, x2, y2):
     '''calculate the Euclidean distance'''
     return math.sqrt((x1 - x2)**2 + (y1 - y2)**2)
 
-
-# 역할 : 사각형의 4변의 좌표를 활용하여 Text에 보다 타이트 하게 박스를 치기 위한 함수이다. 이를 통해 정확도를 개선하게 된다.
+@njit
 def move_points(vertices, index1, index2, r, coef):
     '''move the two points to shrink edge
     Input:
-        vertices: vertices of text region <numpy.ndarray, (8,)>  # 4개의 점 (x,y)에 대한 정보를 가지고 있다.
+        vertices: vertices of text region <numpy.ndarray, (8,)>
         index1  : offset of point1
         index2  : offset of point2
         r       : [r1, r2, r3, r4] in paper
-        coef    : shrink ratio in paper # 축소비율 : 논문에서 나온대로라면 0.3 비율
+        coef    : shrink ratio in paper
     Output:
         vertices: vertices where one edge has been shinked
     '''
@@ -49,8 +49,7 @@ def move_points(vertices, index1, index2, r, coef):
         vertices[y2_index] += ratio * length_y
     return vertices
 
-
-# 위의 move_points 함수에 맞게 점숟르을 축소시켜 보다 높은 정확도가 나오도록 설정한다.
+@njit
 def shrink_poly(vertices, coef=0.3):
     '''shrink the text region
     Input:
@@ -80,14 +79,12 @@ def shrink_poly(vertices, coef=0.3):
     v = move_points(v, 3 + offset, 4 + offset, r, coef)
     return v
 
-
-# 주어진 각도로 이미지를 회전하는 함수이다. ( 시계방향 회전 )
+@njit
 def get_rotate_mat(theta):
     '''positive theta value means rotate clockwise'''
     return np.array([[math.cos(theta), -math.sin(theta)], [math.sin(theta), math.cos(theta)]])
 
 
-# 꼭짓점을 회전시킨다.
 def rotate_vertices(vertices, theta, anchor=None):
     '''rotate vertices around anchor
     Input:
@@ -104,8 +101,7 @@ def rotate_vertices(vertices, theta, anchor=None):
     res = np.dot(rotate_mat, v - anchor)
     return (res + anchor).T.reshape(-1)
 
-
-# 최소 경게 사각형의 좌표를 계산하는 함수이다.
+@njit
 def get_boundary(vertices):
     '''get the tight boundary around given vertices
     Input:
@@ -120,7 +116,7 @@ def get_boundary(vertices):
     y_max = max(y1, y2, y3, y4)
     return x_min, x_max, y_min, y_max
 
-
+@njit
 def cal_error(vertices):
     '''default orientation is x1y1 : left-top, x2y2 : right-top, x3y3 : right-bot, x4y4 : left-bot
     calculate the difference between the vertices orientation and default orientation
@@ -135,8 +131,7 @@ def cal_error(vertices):
           cal_distance(x3, y3, x_max, y_max) + cal_distance(x4, y4, x_min, y_max)
     return err
 
-
-# 폴리곤을 회전시켜 최소 크기의 경계 사각형을 얻기 위한 최젹의 각도를 찾는 함수이다. 
+@njit
 def find_min_rect_angle(vertices):
     '''find the best angle to rotate poly and obtain min rectangle
     Input:
@@ -167,7 +162,7 @@ def find_min_rect_angle(vertices):
             best_index = index
     return angle_list[best_index] / 180 * math.pi
 
-# 이미지를 특정 위치에서 일정 크기로 자르는 경우, 이게 text와 겹치는지를 확인하는 함수이다.
+
 def is_cross_text(start_loc, length, vertices):
     '''check if the crop image crosses text regions
     Input:
@@ -191,7 +186,6 @@ def is_cross_text(start_loc, length, vertices):
     return False
 
 
-# 이미지를 일정 크기의 패치로 자르고, 해당 영역에 맞게 텍스트 영역의 좌표를 구하는 함수이다.
 def crop_img(img, vertices, labels, length):
     '''crop img patches to obtain batch and augment
     Input:
@@ -237,7 +231,7 @@ def crop_img(img, vertices, labels, length):
     new_vertices[:,[1,3,5,7]] -= start_h
     return region, new_vertices
 
-# 이미지의 모든 픽셀 좌표를 회전시켜 새로운 좌표를 계산하는 함수이다.
+@njit
 def rotate_all_pixels(rotate_mat, anchor_x, anchor_y, length):
     '''get rotated locations of all pixels for next stages
     Input:
@@ -345,8 +339,8 @@ class SceneTextDataset(Dataset):
                  split='train',
                  image_size=2048,
                  crop_size=1024,
-                 ignore_under_threshold=10, # 이 보다 작은 텍스트 영역을 무시하게 된다.
-                 drop_under_threshold=1, # 이 값보다 작은 텍스트 영역은 완전히 제거 한다.
+                 ignore_under_threshold=10,
+                 drop_under_threshold=1,
                  color_jitter=True,
                  normalize=True):
         self._lang_list = ['chinese', 'japanese', 'thai', 'vietnamese']
@@ -420,6 +414,147 @@ class SceneTextDataset(Dataset):
         if self.normalize:
             funcs.append(A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
         transform = A.Compose(funcs)
+
+        image = transform(image=image)['image']
+        word_bboxes = np.reshape(vertices, (-1, 4, 2))
+        roi_mask = generate_roi_mask(image, vertices, labels)
+
+        return image, word_bboxes, roi_mask
+
+
+
+
+
+class SceneTextDataset_COCO(Dataset):
+    def __init__(self, root_dir,
+                 split='train',
+                 image_size=2048,
+                 crop_size=1024,
+                 ignore_under_threshold=10,  # 이보다 작은 텍스트 영역을 무시합니다.
+                 drop_under_threshold=1,     # 이보다 작은 텍스트 영역은 완전히 제거합니다.
+                 color_jitter=True,
+                 normalize=True):
+        self._lang_list = ['chinese', 'japanese', 'thai', 'vietnamese']
+        self.root_dir = root_dir
+        self.split = split
+        self.image_size = image_size
+        self.crop_size = crop_size
+        self.color_jitter = color_jitter
+        self.normalize = normalize
+        self.ignore_under_threshold = ignore_under_threshold
+        self.drop_under_threshold = drop_under_threshold
+
+        # 모든 언어의 어노테이션을 통합하여 로드합니다.
+        self.image_id_to_filename = {}
+        self.image_id_to_annotations = {}
+        self.image_ids = []
+        image_id_counter = 0  # 이미지 ID를 전역적으로 관리하기 위한 카운터
+
+        for nation in self._lang_list:
+            # 각 언어별 어노테이션 파일 로드
+            annotation_file = osp.join(root_dir, f'{nation}_receipt', 'coco', f'{split}.json')
+            with open(annotation_file, 'r', encoding='utf-8') as f:
+                coco_data = json.load(f)
+
+            # 이미지 ID와 파일 이름 매핑 생성
+            for img in coco_data['images']:
+                image_id = img['id'] + image_id_counter
+                filename = img['file_name']
+                self.image_id_to_filename[image_id] = filename
+                self.image_ids.append(image_id)
+
+            # 이미지 ID별 어노테이션 매핑 생성
+            for ann in coco_data['annotations']:
+                image_id = ann['image_id'] + image_id_counter
+                if image_id not in self.image_id_to_annotations:
+                    self.image_id_to_annotations[image_id] = []
+                self.image_id_to_annotations[image_id].append(ann)
+
+            # 이미지 ID 카운터 업데이트
+            image_id_counter += max(img['id'] for img in coco_data['images']) + 1
+
+        # 이미지 파일 이름 리스트 생성
+        self.image_fnames = [self.image_id_to_filename[image_id] for image_id in self.image_ids]
+
+    def _infer_dir(self, fname):
+        lang_indicator = fname.split('.')[1]
+        if lang_indicator == 'zh':
+            lang = 'chinese'
+        elif lang_indicator == 'ja':
+            lang = 'japanese'
+        elif lang_indicator == 'th':
+            lang = 'thai'
+        elif lang_indicator == 'vi':
+            lang = 'vietnamese'
+        else:
+            raise ValueError(f'Unknown language indicator: {lang_indicator}')
+        return osp.join(self.root_dir, f'{lang}_receipt', 'img', self.split)
+
+    def __len__(self):
+        return len(self.image_ids)
+
+    def __getitem__(self, idx):
+        image_id = self.image_ids[idx]
+        image_fname = self.image_id_to_filename[image_id]
+        image_fpath = osp.join(self._infer_dir(image_fname), image_fname)
+
+        # 이미지 로드
+        image = Image.open(image_fpath)
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
+
+        # 해당 이미지의 어노테이션 가져오기
+        annotations = self.image_id_to_annotations.get(image_id, [])
+
+        # vertices와 labels 추출
+        vertices = []
+        labels = []
+        for ann in annotations:
+            # 'segmentation' 필드에서 다각형 좌표 추출
+            segmentation = ann.get('segmentation', [])
+            if not segmentation:
+                continue
+            # COCO의 'segmentation'은 리스트의 리스트 형태입니다.
+            # 첫 번째 다각형만 사용합니다.
+            polygon = segmentation[0]
+            # 다각형 좌표를 [num_points, 2] 형태로 변환
+            pts = np.array(polygon).reshape(-1, 2)
+            if pts.shape[0] != 4:
+                continue  # 사각형이 아닌 경우 무시합니다.
+            vertices.append(pts.flatten())
+            labels.append(1)  # 텍스트 영역으로 라벨링
+
+        if len(vertices) == 0:
+            # 텍스트 영역이 없는 경우, 임의의 값 반환 (또는 원하는 방식으로 처리)
+            vertices = np.zeros((0, 8), dtype=np.float32)
+            labels = np.zeros((0,), dtype=np.int64)
+        else:
+            vertices = np.array(vertices, dtype=np.float32)
+            labels = np.array(labels, dtype=np.int64)
+
+        # 작은 영역 필터링
+        vertices, labels = filter_vertices(
+            vertices,
+            labels,
+            ignore_under=self.ignore_under_threshold,
+            drop_under=self.drop_under_threshold
+        )
+
+        # 이미지와 어노테이션에 대한 전처리 적용
+        image, vertices = resize_img(image, vertices, self.image_size)
+        image, vertices = adjust_height(image, vertices)
+        image, vertices = rotate_img(image, vertices)
+        image, vertices = crop_img(image, vertices, labels, self.crop_size)
+
+        image = np.array(image)
+
+        # 이미지에 대한 추가 변환 적용
+        transforms = []
+        if self.color_jitter:
+            transforms.append(A.ColorJitter())
+        if self.normalize:
+            transforms.append(A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
+        transform = A.Compose(transforms)
 
         image = transform(image=image)['image']
         word_bboxes = np.reshape(vertices, (-1, 4, 2))
