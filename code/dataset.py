@@ -341,6 +341,7 @@ class SceneTextDataset(Dataset):
                  crop_size=1024,
                  ignore_under_threshold=10,
                  drop_under_threshold=1,
+
                  color_jitter=True,
                  normalize=True):
 
@@ -351,6 +352,7 @@ class SceneTextDataset(Dataset):
         total_anno = dict(images=dict())
         for nation in self._lang_list:
             with open(osp.join(root_dir, '{}_receipt/ufo/{}.json'.format(nation, split)), 'r', encoding='utf-8') as f:
+
                 anno = json.load(f)
             for im in anno['images']:
                 total_anno['images'][im] = anno['images'][im]
@@ -364,6 +366,7 @@ class SceneTextDataset(Dataset):
         self.drop_under_threshold = drop_under_threshold
         self.ignore_under_threshold = ignore_under_threshold
 
+
     def _infer_dir(self, fname):
         lang_indicator = fname.split('.')[1]
         if lang_indicator == 'zh':
@@ -374,6 +377,7 @@ class SceneTextDataset(Dataset):
             lang = 'thai'
         elif lang_indicator == 'vi':
             lang = 'vietnamese'
+
 
         else:
             raise ValueError
@@ -408,6 +412,14 @@ class SceneTextDataset(Dataset):
         image, vertices = rotate_img(image, vertices)
         image, vertices = crop_img(image, vertices, labels, self.crop_size)
 
+        
+        # 이미지를 그레이스케일로 변환
+#         if image.mode != 'L':
+#             image = image.convert('L')
+#         image = np.array(image)
+
+        # 데이터 증강 적용
+
         if image.mode != 'RGB':
             image = image.convert('RGB')
         image = np.array(image)
@@ -416,7 +428,11 @@ class SceneTextDataset(Dataset):
         if self.color_jitter:
             funcs.append(A.ColorJitter())
         if self.normalize:
+
+#             funcs.append(A.Normalize(mean=(0.5,), std=(0.5,)))  # 그레이스케일 이미지에 맞게 수정
+
             funcs.append(A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
+
         transform = A.Compose(funcs)
 
         image = transform(image=image)['image']
@@ -424,3 +440,4 @@ class SceneTextDataset(Dataset):
         roi_mask = generate_roi_mask(image, vertices, labels)
 
         return image, word_bboxes, roi_mask
+

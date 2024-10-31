@@ -58,6 +58,7 @@ def parse_args():
 
 def do_training(data_dir, model_dir, device, image_size, input_size, num_workers, batch_size,
 
+
                 learning_rate, max_epoch, save_interval, project_name, run_name, log_checkpoint_dir):
     # wandb 초기화
     wandb.init(project=project_name, name=run_name)
@@ -85,19 +86,23 @@ def do_training(data_dir, model_dir, device, image_size, input_size, num_workers
 
     dataset = SceneTextDataset(
         data_dir,
+
         split='train',
         image_size=image_size,
         crop_size=input_size,
     )
     dataset = EASTDataset(dataset)
     num_batches = math.ceil(len(dataset) / batch_size)
+
+
+    # DataLoader 설정: shuffle=False로 설정하여 정렬된 순서대로 로드
     train_loader = DataLoader(
         dataset,
         batch_size=batch_size,
-        shuffle=True,
-        num_workers=num_workers
+        shuffle=False,  # 커리큘럼 학습을 위해 셔플 비활성화
+        num_workers=num_workers,
+        pin_memory=True
     )
-
 
     device = torch.device(device)
 
@@ -132,10 +137,10 @@ def do_training(data_dir, model_dir, device, image_size, input_size, num_workers
                     'Cls loss': extra_info['cls_loss'],
                     'Angle loss': extra_info['angle_loss'],
 
+
                     'IoU loss': extra_info['iou_loss']
                 }
                 pbar.set_postfix(val_dict)
-
 
                 # wandb에 손실 값 로깅
                 wandb.log({
@@ -179,7 +184,6 @@ def do_training(data_dir, model_dir, device, image_size, input_size, num_workers
     log_file.close()
     # wandb 종료
     wandb.finish()
-
 
 
 def main(args):
