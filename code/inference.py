@@ -7,7 +7,7 @@ from glob import glob
 import torch
 import cv2
 from torch import cuda
-from code.models.model import EAST
+from model import EAST
 from tqdm import tqdm
 
 from detect import detect
@@ -26,7 +26,9 @@ def parse_args():
 
     parser.add_argument('--device', default='cuda' if cuda.is_available() else 'cpu')
     parser.add_argument('--input_size', type=int, default=2048)
-    parser.add_argument('--batch_size', type=int, default=5)
+    parser.add_argument('--batch_size', type=int, default=20)
+    parser.add_argument('--checkpoint', default='latest.pth', help='체크포인트 파일명')
+
 
     args = parser.parse_args()
 
@@ -68,7 +70,7 @@ def main(args):
     model = EAST(pretrained=False).to(args.device)
 
     # Get paths to checkpoint files
-    ckpt_fpath = osp.join(args.model_dir, 'latest.pth')
+    ckpt_fpath = osp.join(args.model_dir, args.checkpoint)
 
     if not osp.exists(args.output_dir):
         os.makedirs(args.output_dir)
