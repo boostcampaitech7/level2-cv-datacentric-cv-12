@@ -69,7 +69,7 @@ def main(args):
 
     # Get paths to checkpoint files
     # 체크포인트 파일 변경
-    ckpt_fpath = osp.join(args.model_dir, 'gray_epoch_45.pth')
+    ckpt_fpath = osp.join(args.model_dir, 'gray_epoch_105.pth')
 
     if not osp.exists(args.output_dir):
         os.makedirs(args.output_dir)
@@ -82,7 +82,7 @@ def main(args):
     ufo_result['images'].update(split_result['images'])
 
     # 결과 csv 파일 이름 변경
-    output_fname = 'output_relabeled.csv'
+    output_fname = 'output_gray_105.csv'
     with open(osp.join(args.output_dir, output_fname), 'w') as f:
         json.dump(ufo_result, f, indent=4)
 
