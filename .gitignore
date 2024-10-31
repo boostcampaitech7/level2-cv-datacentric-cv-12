@@ -1,0 +1,14 @@
+*.zip
+*.jpg
+*.json
+*.out
+*.txt
+*.png
+*.pyc
+*.log
+*.wandb
+*.pth
+*.csv
+*.yaml
+
+

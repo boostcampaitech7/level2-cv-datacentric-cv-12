@@ -334,107 +334,6 @@ def filter_vertices(vertices, labels, ignore_under=0, drop_under=0):
     return new_vertices, new_labels
 
 
-# class SceneTextDataset(Dataset):
-#     def __init__(self, root_dir,
-#                  split='train',
-#                  image_size=2048,
-#                  crop_size=1024,
-#                  ignore_under_threshold=10,
-#                  drop_under_threshold=1,
-#                  color_jitter=True,
-#                  normalize=True):
-#         self._lang_list = ['chinese', 'japanese', 'thai', 'vietnamese']
-#         self.root_dir = root_dir
-#         self.split = split
-#         total_anno = dict(images=dict())
-#         for nation in self._lang_list:
-#             with open(osp.join(root_dir, '{}_receipt/ufo/{}.json'.format(nation, split)), 'r', encoding='utf-8') as f:
-#                 anno = json.load(f)
-#             for im in anno['images']:
-#                 total_anno['images'][im] = anno['images'][im]
-
-#         self.anno = total_anno
-#         self.image_fnames = sorted(self.anno['images'].keys())
-
-#         self.image_size, self.crop_size = image_size, crop_size
-#         self.color_jitter, self.normalize = color_jitter, normalize
-
-#         self.drop_under_threshold = drop_under_threshold
-#         self.ignore_under_threshold = ignore_under_threshold
-
-#     def _infer_dir(self, fname):
-#         lang_indicator = fname.split('.')[1]
-#         if lang_indicator == 'zh':
-#             lang = 'chinese'
-#         elif lang_indicator == 'ja':
-#             lang = 'japanese'
-#         elif lang_indicator == 'th':
-#             lang = 'thai'
-#         elif lang_indicator == 'vi':
-#             lang = 'vietnamese'
-#         else:
-#             raise ValueError
-#         return osp.join(self.root_dir, f'{lang}_receipt', 'img', self.split)
-#     def __len__(self):
-#         return len(self.image_fnames)
-
-#     def __getitem__(self, idx):
-#         image_fname = self.image_fnames[idx]
-#         image_fpath = osp.join(self._infer_dir(image_fname), image_fname)
-
-#         vertices, labels = [], []
-#         for word_info in self.anno['images'][image_fname]['words'].values():
-#             num_pts = np.array(word_info['points']).shape[0]
-#             if num_pts > 4:
-#                 continue
-#             vertices.append(np.array(word_info['points']).flatten())
-#             labels.append(1)
-#         vertices, labels = np.array(vertices, dtype=np.float32), np.array(labels, dtype=np.int64)
-
-#         vertices, labels = filter_vertices(
-#             vertices,
-#             labels,
-#             ignore_under=self.ignore_under_threshold,
-#             drop_under=self.drop_under_threshold
-#         )
-
-#         image = Image.open(image_fpath)
-#         image, vertices = resize_img(image, vertices, self.image_size)
-#         image, vertices = adjust_height(image, vertices)
-#         image, vertices = rotate_img(image, vertices)
-#         image, vertices = crop_img(image, vertices, labels, self.crop_size)
-
-#         if image.mode != 'RGB':
-#             image = image.convert('RGB')
-#         image = np.array(image)
-
-#         funcs = []
-#         if self.color_jitter:
-#             funcs.append(A.ColorJitter())
-#         if self.normalize:
-#             funcs.append(A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
-#         transform = A.Compose(funcs)
-
-#         image = transform(image=image)['image']
-#         word_bboxes = np.reshape(vertices, (-1, 4, 2))
-#         roi_mask = generate_roi_mask(image, vertices, labels)
-
-#         return image, word_bboxes, roi_mask
-
-
-
-
-## Grasy Scale 적용 
-import os
-import os.path as osp
-import json
-import numpy as np
-from PIL import Image
-from torch.utils.data import Dataset
-import albumentations as A  # Albumentations 라이브러리 임포트
-
-# 필요한 함수들이 정의되어 있다고 가정합니다.
-# 예: filter_vertices, resize_img, adjust_height, rotate_img, crop_img, generate_roi_mask
 class SceneTextDataset(Dataset):
     def __init__(self, root_dir,
                  split='train',
@@ -442,15 +341,18 @@ class SceneTextDataset(Dataset):
                  crop_size=1024,
                  ignore_under_threshold=10,
                  drop_under_threshold=1,
+
                  color_jitter=True,
                  normalize=True):
+
         self._lang_list = ['chinese', 'japanese', 'thai', 'vietnamese']
+
         self.root_dir = root_dir
         self.split = split
         total_anno = dict(images=dict())
         for nation in self._lang_list:
-            json_path = osp.join(root_dir, f'{nation}_receipt/ufo/{split}.json')
-            with open(json_path, 'r', encoding='utf-8') as f:
+            with open(osp.join(root_dir, '{}_receipt/ufo/{}.json'.format(nation, split)), 'r', encoding='utf-8') as f:
+
                 anno = json.load(f)
             for im in anno['images']:
                 total_anno['images'][im] = anno['images'][im]
@@ -464,6 +366,7 @@ class SceneTextDataset(Dataset):
         self.drop_under_threshold = drop_under_threshold
         self.ignore_under_threshold = ignore_under_threshold
 
+
     def _infer_dir(self, fname):
         lang_indicator = fname.split('.')[1]
         if lang_indicator == 'zh':
@@ -474,8 +377,10 @@ class SceneTextDataset(Dataset):
             lang = 'thai'
         elif lang_indicator == 'vi':
             lang = 'vietnamese'
+
+
         else:
-            raise ValueError(f"Unknown language indicator: {lang_indicator}")
+            raise ValueError
         return osp.join(self.root_dir, f'{lang}_receipt', 'img', self.split)
 
     def __len__(self):
@@ -507,18 +412,27 @@ class SceneTextDataset(Dataset):
         image, vertices = rotate_img(image, vertices)
         image, vertices = crop_img(image, vertices, labels, self.crop_size)
 
+        
+        # 이미지를 그레이스케일로 변환
+#         if image.mode != 'L':
+#             image = image.convert('L')
+#         image = np.array(image)
+
+        # 데이터 증강 적용
+
         if image.mode != 'RGB':
             image = image.convert('RGB')
         image = np.array(image)
 
         funcs = []
-        # 그레이스케일 변환 증강 추가
-        funcs.append(A.ToGray(p=1.0))  # 전체 이미지를 그레이스케일로 변환
-
         if self.color_jitter:
             funcs.append(A.ColorJitter())
         if self.normalize:
+
+#             funcs.append(A.Normalize(mean=(0.5,), std=(0.5,)))  # 그레이스케일 이미지에 맞게 수정
+
             funcs.append(A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
+
         transform = A.Compose(funcs)
 
         image = transform(image=image)['image']
@@ -526,3 +440,4 @@ class SceneTextDataset(Dataset):
         roi_mask = generate_roi_mask(image, vertices, labels)
 
         return image, word_bboxes, roi_mask
+

@@ -35,7 +35,8 @@ def parse_args():
     parser.add_argument('--batch_size', type=int, default=8)
     parser.add_argument('--learning_rate', type=float, default=1e-3)
     parser.add_argument('--max_epoch', type=int, default=150)
-    parser.add_argument('--save_interval', type=int, default=15)
+    parser.add_argument('--save_interval', type=int, default=5)
+
 
     # wandb 관련 인자 추가
     parser.add_argument('--project_name', type=str, default='EAST_Text_Detection',
@@ -56,6 +57,8 @@ def parse_args():
 
 
 def do_training(data_dir, model_dir, device, image_size, input_size, num_workers, batch_size,
+
+
                 learning_rate, max_epoch, save_interval, project_name, run_name, log_checkpoint_dir):
     # wandb 초기화
     wandb.init(project=project_name, name=run_name)
@@ -80,27 +83,29 @@ def do_training(data_dir, model_dir, device, image_size, input_size, num_workers
     log_file_path = osp.join(log_checkpoint_dir, 'training_log.txt')
     log_file = open(log_file_path, 'a')  # 이어쓰기 모드로 파일 열기
 
-    # dataset 불러오기
+
     dataset = SceneTextDataset(
         data_dir,
+
         split='train',
         image_size=image_size,
         crop_size=input_size,
     )
-
-    # 불러온 dataset을 EAST Model 입력값에 맞게 변환
     dataset = EASTDataset(dataset)
-    
-    # 배치 수 (올림)
     num_batches = math.ceil(len(dataset) / batch_size)
+
+
+    # DataLoader 설정: shuffle=False로 설정하여 정렬된 순서대로 로드
     train_loader = DataLoader(
         dataset,
         batch_size=batch_size,
-        shuffle=True,
-        num_workers=num_workers
+        shuffle=False,  # 커리큘럼 학습을 위해 셔플 비활성화
+        num_workers=num_workers,
+        pin_memory=True
     )
 
     device = torch.device(device)
+
     model = EAST()
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
@@ -109,12 +114,14 @@ def do_training(data_dir, model_dir, device, image_size, input_size, num_workers
     model.train()
     for epoch in range(max_epoch):
         epoch_loss, epoch_start = 0, time.time()
+
         with tqdm(total=num_batches, desc=f'[Epoch {epoch + 1}]', ncols=100) as pbar:
             for batch_idx, (img, gt_score_map, gt_geo_map, roi_mask) in enumerate(train_loader):
                 img = img.to(device)
                 gt_score_map = gt_score_map.to(device)
                 gt_geo_map = gt_geo_map.to(device)
                 roi_mask = roi_mask.to(device)
+
 
                 loss, extra_info = model.train_step(img, gt_score_map, gt_geo_map, roi_mask)
                 optimizer.zero_grad()
@@ -126,8 +133,11 @@ def do_training(data_dir, model_dir, device, image_size, input_size, num_workers
 
                 pbar.update(1)
                 val_dict = {
+
                     'Cls loss': extra_info['cls_loss'],
                     'Angle loss': extra_info['angle_loss'],
+
+
                     'IoU loss': extra_info['iou_loss']
                 }
                 pbar.set_postfix(val_dict)
@@ -166,7 +176,7 @@ def do_training(data_dir, model_dir, device, image_size, input_size, num_workers
 
         # 체크포인트 저장
         if (epoch + 1) % save_interval == 0:
-            ckpt_fpath = osp.join(log_checkpoint_dir, f'gray_epoch_{epoch + 1}.pth')
+            ckpt_fpath = osp.join(log_checkpoint_dir, f'epoch_{epoch + 1}.pth')
             torch.save(model.state_dict(), ckpt_fpath)
             wandb.save(ckpt_fpath)
 
@@ -179,7 +189,7 @@ def do_training(data_dir, model_dir, device, image_size, input_size, num_workers
 def main(args):
     do_training(**args.__dict__)
 
-
 if __name__ == '__main__':
     args = parse_args()
     main(args)
+
