@@ -68,7 +68,8 @@ def main(args):
     model = EAST(pretrained=False).to(args.device)
 
     # Get paths to checkpoint files
-    ckpt_fpath = osp.join(args.model_dir, 'base_150epoch.pth')
+    # 체크포인트 파일 변경
+    ckpt_fpath = osp.join(args.model_dir, 'epoch_150.pth')
 
     if not osp.exists(args.output_dir):
         os.makedirs(args.output_dir)
@@ -80,7 +81,8 @@ def main(args):
                                 args.batch_size, split='test')
     ufo_result['images'].update(split_result['images'])
 
-    output_fname = 'output.csv'
+    # 결과 csv 파일 이름 변경
+    output_fname = 'output_relabeled.csv'
     with open(osp.join(args.output_dir, output_fname), 'w') as f:
         json.dump(ufo_result, f, indent=4)
 

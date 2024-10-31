@@ -191,12 +191,16 @@ def generate_score_geo_maps(image, word_bboxes, map_scale=0.5):
     word_polys = []
 
     for bbox in word_bboxes:
+        # shrink_bbox 함수로 GT bbox를 줄인 글자중심영역의 좌표
         poly = np.around(map_scale * shrink_bbox(bbox)).astype(np.int32)
+        # 글자중심영역의 좌표를 word_polys에 넣기
         word_polys.append(poly)
 
         center_mask = np.zeros((map_h, map_w), np.float32)
         cv2.fillPoly(center_mask, [poly], 1)
 
+        # geo_map 만들기
+        # 0~180도까지 box를 돌려가며 가장 적합한 각도 찾기
         theta = find_min_rect_angle(bbox)
         rotated_bbox = rotate_bbox(bbox, theta) * map_scale
         x_min, y_min = nb_amin(rotated_bbox, axis=0)
@@ -204,7 +208,8 @@ def generate_score_geo_maps(image, word_bboxes, map_scale=0.5):
 
         anchor = bbox[0] * map_scale
         rotated_x, rotated_y = get_rotated_coords(map_h, map_w, theta, anchor)
-
+        
+        # d1~d4: 각 픽셀마다 box로부터 얼마나 떨어져있는지
         d1, d2 = rotated_y - y_min, y_max - rotated_y
         d1[d1 < 0] = 0
         d2[d2 < 0] = 0
@@ -216,7 +221,8 @@ def generate_score_geo_maps(image, word_bboxes, map_scale=0.5):
         geo_map[:, :, 2] += d3 * center_mask * inv_scale
         geo_map[:, :, 3] += d4 * center_mask * inv_scale
         geo_map[:, :, 4] += theta * center_mask
-
+    
+    # 글자중심영역 다각형을 1로 채우기
     cv2.fillPoly(score_map, word_polys, 1)
 
     return score_map, geo_map
@@ -227,8 +233,10 @@ class EASTDataset(Dataset):
         self.dataset = dataset
         self.map_scale = map_scale
         self.to_tensor = to_tensor
-
+    
+    # idx번째 sample을 가져오는 함수
     def __getitem__(self, idx):
+        # 원본 image 자체와 원본 bbox로 score_map, geo_map 만들기
         image, word_bboxes, roi_mask = self.dataset[idx]
         score_map, geo_map = generate_score_geo_maps(image, word_bboxes, map_scale=self.map_scale)
 
@@ -237,6 +245,7 @@ class EASTDataset(Dataset):
         if roi_mask.ndim == 2:
             roi_mask = np.expand_dims(roi_mask, axis=2)
 
+        # PyTorch 사용을 위한 텐서화
         if self.to_tensor:
             image = torch.Tensor(image).permute(2, 0, 1)
             score_map = torch.Tensor(score_map).permute(2, 0, 1)
