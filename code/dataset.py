@@ -343,7 +343,9 @@ class SceneTextDataset(Dataset):
                  drop_under_threshold=1,
                  color_jitter=True,
                  normalize=True):
-        self._lang_list = ['chinese', 'japanese', 'thai', 'vietnamese','english']
+
+        self._lang_list = ['chinese', 'japanese', 'thai', 'vietnamese']
+
         self.root_dir = root_dir
         self.split = split
         total_anno = dict(images=dict())
@@ -372,10 +374,9 @@ class SceneTextDataset(Dataset):
             lang = 'thai'
         elif lang_indicator == 'vi':
             lang = 'vietnamese'
-        elif lang_indicator == 'en':
-            lang = 'english'
+
         else:
-            raise ValueError(f"Unsupported language indicator: {lang_indicator}")
+            raise ValueError
         return osp.join(self.root_dir, f'{lang}_receipt', 'img', self.split)
 
     def __len__(self):
