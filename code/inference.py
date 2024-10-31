@@ -69,7 +69,7 @@ def main(args):
 
     # Get paths to checkpoint files
     # 체크포인트 파일 변경
-    ckpt_fpath = osp.join(args.model_dir, 'epoch_150.pth')
+    ckpt_fpath = osp.join(args.model_dir, 'gray_epoch_45.pth')
 
     if not osp.exists(args.output_dir):
         os.makedirs(args.output_dir)
