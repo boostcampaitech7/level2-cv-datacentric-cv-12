@@ -334,6 +334,127 @@ def filter_vertices(vertices, labels, ignore_under=0, drop_under=0):
     return new_vertices, new_labels
 
 
+# class SceneTextDataset(Dataset):
+#     def __init__(self, root_dir,
+#                  split='train',
+#                  image_size=2048,
+#                  crop_size=1024,
+#                  ignore_under_threshold=10,
+#                  drop_under_threshold=1,
+#                  color_jitter=False,
+#                  normalize=True):
+#         self._lang_list = ['chinese', 'japanese', 'thai', 'vietnamese', 'chinese2', 'japanese2', 'thai2', 'vietnamese2']
+#         self.root_dir = root_dir
+#         self.split = split
+#         total_anno = dict(images=dict())
+#         for nation in self._lang_list:
+#             with open(osp.join(root_dir, '{}_receipt/ufo/{}.json'.format(nation, split)), 'r', encoding='utf-8') as f:
+#                 anno = json.load(f)
+#             for im in anno['images']:
+#                 total_anno['images'][im] = anno['images'][im]
+
+#         self.anno = total_anno
+#         self.image_fnames = sorted(self.anno['images'].keys())
+
+#         self.image_size, self.crop_size = image_size, crop_size
+#         self.color_jitter, self.normalize = color_jitter, normalize
+
+#         self.drop_under_threshold = drop_under_threshold
+#         self.ignore_under_threshold = ignore_under_threshold
+
+#     def _infer_dir(self, fname):
+#         lang_indicator = fname.split('.')[1]
+#         if lang_indicator == 'zh':
+#             lang = 'chinese'
+
+#         elif lang_indicator == 'ja':
+#             lang = 'japanese'
+
+#         elif lang_indicator == 'th':
+#             lang = 'thai'
+
+#         elif lang_indicator == 'vi':
+#             lang = 'vietnamese'
+
+#         elif lang_indicator == 'custom_ja' :
+#             lang = 'japanese2'
+
+#         elif lang_indicator == 'custom_zh' :
+#             lang = 'chinese2'
+
+#         elif lang_indicator == 'custom_th' :
+#             lang = 'thai2'
+
+#         elif lang_indicator == 'custom_vi' :
+#             lang = 'vietnamese2'
+
+
+#         else:
+#             raise ValueError
+#         return osp.join(self.root_dir, f'{lang}_receipt', 'img', self.split)
+#     def __len__(self):
+#         return len(self.image_fnames)
+
+#     def __getitem__(self, idx):
+#         image_fname = self.image_fnames[idx]
+#         image_fpath = osp.join(self._infer_dir(image_fname), image_fname)
+
+#         vertices, labels = [], []
+#         for word_info in self.anno['images'][image_fname]['words'].values():
+#             num_pts = np.array(word_info['points']).shape[0]
+#             if num_pts > 4:
+#                 continue
+#             vertices.append(np.array(word_info['points']).flatten())
+#             labels.append(1)
+#         vertices, labels = np.array(vertices, dtype=np.float32), np.array(labels, dtype=np.int64)
+
+#         vertices, labels = filter_vertices(
+#             vertices,
+#             labels,
+#             ignore_under=self.ignore_under_threshold,
+#             drop_under=self.drop_under_threshold
+#         )
+
+#         image = Image.open(image_fpath)
+#         image, vertices = resize_img(image, vertices, self.image_size)
+#         image, vertices = adjust_height(image, vertices)
+#         image, vertices = rotate_img(image, vertices)
+#         image, vertices = crop_img(image, vertices, labels, self.crop_size)
+
+
+#         '''
+#             원래 RGB로 변경하는 이미지를 grayscale로 변경하기 위해 주석처리 진행.
+#         '''
+#         # if image.mode != 'RGB':
+#         #     image = image.convert('RGB')
+#         # image = np.array(image)
+
+
+#         # 이미지를 그레이스케일로 변환
+#         if image.mode != 'L':
+#             image = image.convert('L')
+#         image = np.array(image)
+
+
+#         '''
+#             여기서 데이터를 추가하면 된다.
+#         '''
+#         funcs = []
+#         if self.color_jitter:
+#             funcs.append(A.ColorJitter())
+#         if self.normalize:
+#             funcs.append(A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
+#         transform = A.Compose(funcs)
+
+#         image = transform(image=image)['image']
+#         word_bboxes = np.reshape(vertices, (-1, 4, 2))
+#         roi_mask = generate_roi_mask(image, vertices, labels)
+
+#         return image, word_bboxes, roi_mask
+
+
+
+
 class SceneTextDataset(Dataset):
     def __init__(self, root_dir,
                  split='train',
@@ -341,14 +462,17 @@ class SceneTextDataset(Dataset):
                  crop_size=1024,
                  ignore_under_threshold=10,
                  drop_under_threshold=1,
-                 color_jitter=True,
+                 color_jitter=False,
                  normalize=True):
-        self._lang_list = ['chinese', 'japanese', 'thai', 'vietnamese']
+        self._lang_list = ['chinese', 'japanese', 'thai', 'vietnamese', 'chinese2', 'japanese2', 'thai2', 'vietnamese2']
         self.root_dir = root_dir
         self.split = split
         total_anno = dict(images=dict())
+        
+        # 모든 언어에 대해 주석 로드
         for nation in self._lang_list:
-            with open(osp.join(root_dir, '{}_receipt/ufo/{}.json'.format(nation, split)), 'r', encoding='utf-8') as f:
+            json_path = osp.join(root_dir, f'{nation}_receipt/ufo/{split}.json')
+            with open(json_path, 'r', encoding='utf-8') as f:
                 anno = json.load(f)
             for im in anno['images']:
                 total_anno['images'][im] = anno['images'][im]
@@ -362,6 +486,10 @@ class SceneTextDataset(Dataset):
         self.drop_under_threshold = drop_under_threshold
         self.ignore_under_threshold = ignore_under_threshold
 
+        # 각 이미지의 박스 수 계산 및 정렬
+        self.num_boxes = self.compute_num_boxes()
+        self.sort_by_num_boxes()
+
     def _infer_dir(self, fname):
         lang_indicator = fname.split('.')[1]
         if lang_indicator == 'zh':
@@ -372,9 +500,18 @@ class SceneTextDataset(Dataset):
             lang = 'thai'
         elif lang_indicator == 'vi':
             lang = 'vietnamese'
+        elif lang_indicator == 'custom_ja':
+            lang = 'japanese2'
+        elif lang_indicator == 'custom_zh':
+            lang = 'chinese2'
+        elif lang_indicator == 'custom_th':
+            lang = 'thai2'
+        elif lang_indicator == 'custom_vi':
+            lang = 'vietnamese2'
         else:
-            raise ValueError
+            raise ValueError(f"Unknown language indicator: {lang_indicator}")
         return osp.join(self.root_dir, f'{lang}_receipt', 'img', self.split)
+
     def __len__(self):
         return len(self.image_fnames)
 
@@ -404,15 +541,17 @@ class SceneTextDataset(Dataset):
         image, vertices = rotate_img(image, vertices)
         image, vertices = crop_img(image, vertices, labels, self.crop_size)
 
-        if image.mode != 'RGB':
-            image = image.convert('RGB')
+        # 이미지를 그레이스케일로 변환
+        if image.mode != 'L':
+            image = image.convert('L')
         image = np.array(image)
 
+        # 데이터 증강 적용
         funcs = []
         if self.color_jitter:
             funcs.append(A.ColorJitter())
         if self.normalize:
-            funcs.append(A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
+            funcs.append(A.Normalize(mean=(0.5,), std=(0.5,)))  # 그레이스케일 이미지에 맞게 수정
         transform = A.Compose(funcs)
 
         image = transform(image=image)['image']
@@ -421,143 +560,21 @@ class SceneTextDataset(Dataset):
 
         return image, word_bboxes, roi_mask
 
+    def compute_num_boxes(self):
+        """
+        각 이미지의 박스 수를 계산합니다.
+        """
+        num_boxes = []
+        for image_fname in self.image_fnames:
+            words = self.anno['images'][image_fname].get('words', {})
+            count = len(words)
+            num_boxes.append(count)
+        return np.array(num_boxes)
 
+    def sort_by_num_boxes(self):
+        """
+        박스 수가 적은 순서대로 이미지 파일 이름을 정렬합니다.
+        """
+        sorted_indices = np.argsort(self.num_boxes)  # 오름차순 정렬
+        self.image_fnames = [self.image_fnames[i] for i in sorted_indices]
 
-
-
-class SceneTextDataset_COCO(Dataset):
-    def __init__(self, root_dir,
-                 split='train',
-                 image_size=2048,
-                 crop_size=1024,
-                 ignore_under_threshold=10,  # 이보다 작은 텍스트 영역을 무시합니다.
-                 drop_under_threshold=1,     # 이보다 작은 텍스트 영역은 완전히 제거합니다.
-                 color_jitter=True,
-                 normalize=True):
-        self._lang_list = ['chinese', 'japanese', 'thai', 'vietnamese']
-        self.root_dir = root_dir
-        self.split = split
-        self.image_size = image_size
-        self.crop_size = crop_size
-        self.color_jitter = color_jitter
-        self.normalize = normalize
-        self.ignore_under_threshold = ignore_under_threshold
-        self.drop_under_threshold = drop_under_threshold
-
-        # 모든 언어의 어노테이션을 통합하여 로드합니다.
-        self.image_id_to_filename = {}
-        self.image_id_to_annotations = {}
-        self.image_ids = []
-        image_id_counter = 0  # 이미지 ID를 전역적으로 관리하기 위한 카운터
-
-        for nation in self._lang_list:
-            # 각 언어별 어노테이션 파일 로드
-            annotation_file = osp.join(root_dir, f'{nation}_receipt', 'coco', f'{split}.json')
-            with open(annotation_file, 'r', encoding='utf-8') as f:
-                coco_data = json.load(f)
-
-            # 이미지 ID와 파일 이름 매핑 생성
-            for img in coco_data['images']:
-                image_id = img['id'] + image_id_counter
-                filename = img['file_name']
-                self.image_id_to_filename[image_id] = filename
-                self.image_ids.append(image_id)
-
-            # 이미지 ID별 어노테이션 매핑 생성
-            for ann in coco_data['annotations']:
-                image_id = ann['image_id'] + image_id_counter
-                if image_id not in self.image_id_to_annotations:
-                    self.image_id_to_annotations[image_id] = []
-                self.image_id_to_annotations[image_id].append(ann)
-
-            # 이미지 ID 카운터 업데이트
-            image_id_counter += max(img['id'] for img in coco_data['images']) + 1
-
-        # 이미지 파일 이름 리스트 생성
-        self.image_fnames = [self.image_id_to_filename[image_id] for image_id in self.image_ids]
-
-    def _infer_dir(self, fname):
-        lang_indicator = fname.split('.')[1]
-        if lang_indicator == 'zh':
-            lang = 'chinese'
-        elif lang_indicator == 'ja':
-            lang = 'japanese'
-        elif lang_indicator == 'th':
-            lang = 'thai'
-        elif lang_indicator == 'vi':
-            lang = 'vietnamese'
-        else:
-            raise ValueError(f'Unknown language indicator: {lang_indicator}')
-        return osp.join(self.root_dir, f'{lang}_receipt', 'img', self.split)
-
-    def __len__(self):
-        return len(self.image_ids)
-
-    def __getitem__(self, idx):
-        image_id = self.image_ids[idx]
-        image_fname = self.image_id_to_filename[image_id]
-        image_fpath = osp.join(self._infer_dir(image_fname), image_fname)
-
-        # 이미지 로드
-        image = Image.open(image_fpath)
-        if image.mode != 'RGB':
-            image = image.convert('RGB')
-
-        # 해당 이미지의 어노테이션 가져오기
-        annotations = self.image_id_to_annotations.get(image_id, [])
-
-        # vertices와 labels 추출
-        vertices = []
-        labels = []
-        for ann in annotations:
-            # 'segmentation' 필드에서 다각형 좌표 추출
-            segmentation = ann.get('segmentation', [])
-            if not segmentation:
-                continue
-            # COCO의 'segmentation'은 리스트의 리스트 형태입니다.
-            # 첫 번째 다각형만 사용합니다.
-            polygon = segmentation[0]
-            # 다각형 좌표를 [num_points, 2] 형태로 변환
-            pts = np.array(polygon).reshape(-1, 2)
-            if pts.shape[0] != 4:
-                continue  # 사각형이 아닌 경우 무시합니다.
-            vertices.append(pts.flatten())
-            labels.append(1)  # 텍스트 영역으로 라벨링
-
-        if len(vertices) == 0:
-            # 텍스트 영역이 없는 경우, 임의의 값 반환 (또는 원하는 방식으로 처리)
-            vertices = np.zeros((0, 8), dtype=np.float32)
-            labels = np.zeros((0,), dtype=np.int64)
-        else:
-            vertices = np.array(vertices, dtype=np.float32)
-            labels = np.array(labels, dtype=np.int64)
-
-        # 작은 영역 필터링
-        vertices, labels = filter_vertices(
-            vertices,
-            labels,
-            ignore_under=self.ignore_under_threshold,
-            drop_under=self.drop_under_threshold
-        )
-
-        # 이미지와 어노테이션에 대한 전처리 적용
-        image, vertices = resize_img(image, vertices, self.image_size)
-        image, vertices = adjust_height(image, vertices)
-        image, vertices = rotate_img(image, vertices)
-        image, vertices = crop_img(image, vertices, labels, self.crop_size)
-
-        image = np.array(image)
-
-        # 이미지에 대한 추가 변환 적용
-        transforms = []
-        if self.color_jitter:
-            transforms.append(A.ColorJitter())
-        if self.normalize:
-            transforms.append(A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
-        transform = A.Compose(transforms)
-
-        image = transform(image=image)['image']
-        word_bboxes = np.reshape(vertices, (-1, 4, 2))
-        roi_mask = generate_roi_mask(image, vertices, labels)
-
-        return image, word_bboxes, roi_mask
