@@ -6,3 +6,6 @@
 *.pth
 ._.DS_Store
 code/baseline
+*.log
+code/wandb
+*.txt

@@ -67,21 +67,25 @@ def main(args):
     # Initialize model
     model = EAST(pretrained=False).to(args.device)
 
-    # Get paths to checkpoint files
-    ckpt_fpath = osp.join(args.model_dir, 'latest.pth')
+    # 체크포인트 파일 경로 설정
+    ckpt_fpath = osp.join(args.model_dir, 'testing runname_2024-11-01_15-04-59_training_log_epoch10.pth')
 
     if not osp.exists(args.output_dir):
         os.makedirs(args.output_dir)
 
     print('Inference in progress')
 
+    # 체크포인트 파일 이름에서 .pth를 제거하고 .csv로 변경
+    base_name = osp.basename(ckpt_fpath).replace('.pth', '.csv')
+    output_fname = osp.join(args.output_dir, base_name)
+
     ufo_result = dict(images=dict())
     split_result = do_inference(model, ckpt_fpath, args.data_dir, args.input_size,
                                 args.batch_size, split='test')
     ufo_result['images'].update(split_result['images'])
 
-    output_fname = 'output.csv'
-    with open(osp.join(args.output_dir, output_fname), 'w') as f:
+    # 결과를 output_fname에 저장
+    with open(output_fname, 'w') as f:
         json.dump(ufo_result, f, indent=4)
 
 
