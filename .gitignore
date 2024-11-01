@@ -4,3 +4,5 @@
 *.csv
 *.png
 *.pth
+._.DS_Store
+code/baseline
