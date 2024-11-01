@@ -288,7 +288,7 @@ def adjust_height(img, vertices, ratio=0.2):
     return img, new_vertices
 
 
-def rotate_img(img, vertices, angle_range=10):
+def rotate_img(img, vertices, angle_range=5):
     '''rotate image [-10, 10] degree to aug data
     Input:
         img         : PIL Image
@@ -334,6 +334,33 @@ def filter_vertices(vertices, labels, ignore_under=0, drop_under=0):
     return new_vertices, new_labels
 
 
+from albumentations.core.transforms_interface import ImageOnlyTransform
+class SaltPepperNoise(ImageOnlyTransform):
+    def __init__(self, amount=0.005, always_apply=False, p=0.5):
+        super(SaltPepperNoise, self).__init__(always_apply=always_apply, p=p)
+        self.amount = amount
+
+    def apply(self, image, **params):
+        row, col, ch = image.shape
+        out = np.copy(image)
+
+        # Salt (흰색 픽셀) 추가
+        num_salt = np.ceil(self.amount * image.size * 0.5)
+        coords = [np.random.randint(0, i - 1, int(num_salt)) for i in image.shape]
+        out[coords[0], coords[1], :] = 255
+
+        # Pepper (검은색 픽셀) 추가
+        num_pepper = np.ceil(self.amount * image.size * 0.5)
+        coords = [np.random.randint(0, i - 1, int(num_pepper)) for i in image.shape]
+        out[coords[0], coords[1], :] = 0
+
+        return out
+
+    def get_transform_init_args_names(self):
+        return ("amount",)
+    
+
+
 class SceneTextDataset(Dataset):
     def __init__(self, root_dir,
                  split='train',
@@ -341,7 +368,7 @@ class SceneTextDataset(Dataset):
                  crop_size=1024,
                  ignore_under_threshold=10,
                  drop_under_threshold=1,
-                 color_jitter=True,
+                 color_jitter=False,
                  normalize=True):
         self._lang_list = ['chinese', 'japanese', 'thai', 'vietnamese']
         self.root_dir = root_dir
@@ -404,15 +431,22 @@ class SceneTextDataset(Dataset):
         image, vertices = rotate_img(image, vertices)
         image, vertices = crop_img(image, vertices, labels, self.crop_size)
 
+
         if image.mode != 'RGB':
             image = image.convert('RGB')
         image = np.array(image)
+
+    
 
         funcs = []
         if self.color_jitter:
             funcs.append(A.ColorJitter())
         if self.normalize:
             funcs.append(A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
+        # GrayScale 변환 추가하기   
+        funcs.append(A.ToGray(always_apply=True))
+        funcs.append(SaltPepperNoise(amount=0.001, p=0.3)) # salt and papper 추가
+        funcs.append(A.GaussianBlur(blur_limit=(1,3), p=0.5)) # Gaussian papper 추가
         transform = A.Compose(funcs)
 
         image = transform(image=image)['image']

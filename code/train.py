@@ -4,7 +4,7 @@ import time
 import math
 from datetime import timedelta
 from argparse import ArgumentParser
-
+import numpy as np
 import torch
 from torch import cuda
 from torch.utils.data import DataLoader
@@ -18,6 +18,8 @@ from baseline.model import EAST
 # wandb 연동을 위한 라이브러리 설치
 import wandb
 import datetime
+import random
+
 
 def parse_args():
     parser = ArgumentParser()
@@ -104,6 +106,7 @@ def do_training(data_dir, model_dir, device, image_size, input_size, num_workers
     log_file_path = osp.join(log_checkpoint_dir, log_file_name)
     log_file = open(log_file_path, 'a')
 
+    # 데이터셋 로딩 (SceneTextDataset)
     dataset = SceneTextDataset(
         data_dir,
         split='train',
@@ -184,16 +187,68 @@ def do_training(data_dir, model_dir, device, image_size, input_size, num_workers
         # wandb에 에폭당 손실 값 로깅
         wandb.log({'train/epoch_loss': mean_loss, 'epoch': epoch + 1})
 
+        # 이미지 시각화 추가
+        try:
+            num_samples = 10  # 시각화할 이미지 수
+            dataset_size = len(dataset)
+            
+            # 데이터셋 크기가 시각화할 이미지 수보다 작은 경우 처리
+            if dataset_size < num_samples:
+                num_samples = dataset_size
+                print(f"데이터셋의 크기가 {num_samples}보다 작습니다. {num_samples}개의 이미지만 시각화합니다.")
+            
+            # 랜덤으로 이미지 인덱스 선택
+            random_indices = random.sample(range(dataset_size), num_samples)
+            sample_images = []
+            
+            for idx in random_indices:
+                sample_img, word_bboxes, gt_geo_map, roi_mask = dataset[idx]  # 랜덤 인덱스의 샘플
+                sample_img = sample_img.cpu().numpy().transpose(1, 2, 0)  # [C, H, W] -> [H, W, C]
+
+                # 그레이스케일 이미지인 경우 채널 수가 1이므로 이를 처리
+                if sample_img.shape[2] == 1:
+                    # 정규화 되돌리기
+                    mean = np.array([0.5])
+                    std = np.array([0.5])
+                    sample_img = (sample_img * std + mean) * 255.0
+                    sample_img = sample_img.astype(np.uint8)
+                else:
+                    # 정규화 되돌리기
+                    mean = np.array([0.5, 0.5, 0.5])
+                    std = np.array([0.5, 0.5, 0.5])
+                    sample_img = (sample_img * std + mean) * 255.0
+                    sample_img = sample_img.astype(np.uint8)
+                
+                # wandb.Image 객체로 변환하고 캡션 추가
+                img_caption = f"Sample {idx} - Epoch {epoch + 1}"
+                sample_images.append(wandb.Image(sample_img, caption=img_caption))
+            
+            # wandb에 이미지 리스트 로깅
+            wandb.log({"validation_sample_images": sample_images, "epoch": epoch + 1})
+
+        except Exception as e:
+            print(f"Error visualizing images: {e}")
+
+        # 체크포인트 저장
         # 체크포인트 저장
         if (epoch + 1) % save_interval == 0:
             ckpt_fpath = osp.join(model_dir, f'{run_name}_{timestamp}_training_log_epoch{epoch + 1}.pth')
             torch.save(model.state_dict(), ckpt_fpath)
-            wandb.save(ckpt_fpath)
+            
+            # wandb.Artifact를 사용하여 체크포인트 업로드
+            artifact = wandb.Artifact(f'model-checkpoint-epoch-{epoch + 1}', type='model')
+            artifact.add_file(ckpt_fpath, name=f'checkpoint_epoch_{epoch + 1}.pth')
+            wandb.log_artifact(artifact)
+            
+            print(f'Checkpoint saved and uploaded to wandb: {ckpt_fpath}')
 
+    # 로그 파일 닫기 및 wandb 종료는 루프 밖에서 처리
     # 로그 파일 닫기
     log_file.close()
     # wandb 종료
     wandb.finish()
+
+
 
 
 def main(args):

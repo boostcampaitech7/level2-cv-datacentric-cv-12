@@ -6,12 +6,14 @@ from glob import glob
 
 import torch
 import cv2
+import random
+import numpy as np
+import matplotlib.pyplot as plt
 from torch import cuda
 from baseline.model import EAST
 from tqdm import tqdm
 
 from baseline.detect import detect
-
 
 CHECKPOINT_EXTENSIONS = ['.pth', '.ckpt']
 LANGUAGE_LIST = ['chinese', 'japanese', 'thai', 'vietnamese']
@@ -35,19 +37,108 @@ def parse_args():
 
     return args
 
+def remove_shadow(image):
+    """
+    이미지에서 그림자를 제거하는 함수.
+    """
+    # RGB 채널 분리
+    rgb_planes = cv2.split(image)
 
-def do_inference(model, ckpt_fpath, data_dir, input_size, batch_size, split='test'):
+    result_planes = []
+    for plane in rgb_planes:
+        dilated_img = cv2.dilate(plane, np.ones((7, 7), np.uint8))
+        bg_img = cv2.medianBlur(dilated_img, 21)
+        diff_img = 255 - cv2.absdiff(plane, bg_img)
+        norm_img = cv2.normalize(diff_img, None, alpha=0, beta=255, 
+                                 norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8UC1)
+        result_planes.append(norm_img)
+
+    # 채널 합성하여 그림자 제거된 이미지 생성
+    result_norm = cv2.merge(result_planes)
+    return result_norm
+
+def apply_otsu_threshold(gray_image):
+    """
+    그레이스케일 이미지에 Otsu의 이진화 적용.
+    """
+    _, otsu_image = cv2.threshold(gray_image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    return otsu_image
+
+
+
+def apply_clahe(gray_image, clip_limit=2.0, tile_grid_size=(8, 8)):
+    """
+    그레이스케일 이미지에 CLAHE를 적용하여 대비를 향상시킵니다.
+    
+    Args:
+        gray_image (numpy.ndarray): 그레이스케일 이미지.
+        clip_limit (float): CLAHE의 클립 한계. 기본값은 2.0.
+        tile_grid_size (tuple): CLAHE의 타일 그리드 크기. 기본값은 (8, 8).
+    
+    Returns:
+        numpy.ndarray: CLAHE가 적용된 이미지.
+    """
+    clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
+    return clahe.apply(gray_image)
+
+
+
+def do_inference(model, ckpt_fpath, data_dir, input_size, batch_size, split='test', output_dir='predictions'):
     model.load_state_dict(torch.load(ckpt_fpath, map_location='cpu'))
     model.eval()
+
+    # base_name 정의 (확장자 제거)
+    base_name = osp.splitext(osp.basename(ckpt_fpath))[0]
 
     image_fnames, by_sample_bboxes = [], []
 
     images = []
     
+    # 플래그 변수 추가
+    first_image_processed = False
+
     for image_fpath in tqdm(sum([glob(osp.join(data_dir, f'{lang}_receipt/img/{split}/*')) for lang in LANGUAGE_LIST], [])):
         image_fnames.append(osp.basename(image_fpath))
 
-        images.append(cv2.imread(image_fpath)[:, :, ::-1])
+        # 이미지 로드 (BGR -> RGB)
+        image = cv2.imread(image_fpath)
+        if image is None:
+            print(f"이미지를 열 수 없습니다: {image_fpath}")
+            continue
+        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        
+        # 그림자 제거
+        shadow_removed = remove_shadow(image_rgb)
+        
+        # 그레이스케일로 변환
+        gray = cv2.cvtColor(shadow_removed, cv2.COLOR_RGB2GRAY)
+        
+        # CLAHE 적용
+        enhanced = apply_clahe(gray)  # 또는 직접 적용: enhanced = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8)).apply(gray)
+        
+        # Otsu 이진화 적용
+        otsu = apply_otsu_threshold(enhanced)
+        
+        # 다시 3채널로 변환하여 모델 입력 형식 유지
+        otsu_3ch = cv2.cvtColor(otsu, cv2.COLOR_GRAY2RGB)
+        
+        images.append(otsu_3ch)
+
+        # 첫 번째 이미지 시각화
+        if not first_image_processed:
+            # 파일로 저장 (f-string 사용)
+            sample_image_path = osp.join(output_dir, f'{base_name}_sample_input_image.png')
+            cv2.imwrite(sample_image_path, cv2.cvtColor(otsu_3ch, cv2.COLOR_RGB2BGR))
+            print(f'Sample input image saved to {sample_image_path}')
+
+            # 화면에 표시하려면 아래 주석을 제거하세요
+            # plt.imshow(otsu_3ch)
+            # plt.title('Sample Input Image (Grayscale + Shadow Removed + Otsu)')
+            # plt.axis('off')
+            # plt.show()
+
+            first_image_processed = True
+
         if len(images) == batch_size:
             by_sample_bboxes.extend(detect(model, images, input_size))
             images = []
@@ -62,13 +153,12 @@ def do_inference(model, ckpt_fpath, data_dir, input_size, batch_size, split='tes
 
     return ufo_result
 
-
 def main(args):
     # Initialize model
     model = EAST(pretrained=False).to(args.device)
 
     # 체크포인트 파일 경로 설정
-    ckpt_fpath = osp.join(args.model_dir, 'testing runname_2024-11-01_15-04-59_training_log_epoch10.pth')
+    ckpt_fpath = osp.join(args.model_dir, 'checkpoint_epoch_9.pth')
 
     if not osp.exists(args.output_dir):
         os.makedirs(args.output_dir)
@@ -80,14 +170,20 @@ def main(args):
     output_fname = osp.join(args.output_dir, base_name)
 
     ufo_result = dict(images=dict())
-    split_result = do_inference(model, ckpt_fpath, args.data_dir, args.input_size,
-                                args.batch_size, split='test')
+    split_result = do_inference(
+        model, 
+        ckpt_fpath, 
+        args.data_dir, 
+        args.input_size,
+        args.batch_size, 
+        split='test',
+        output_dir=args.output_dir,
+    )
     ufo_result['images'].update(split_result['images'])
 
     # 결과를 output_fname에 저장
     with open(output_fname, 'w') as f:
         json.dump(ufo_result, f, indent=4)
-
 
 if __name__ == '__main__':
     args = parse_args()
