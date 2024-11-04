@@ -1,0 +1,15 @@
+/data/ephemeral/home/level2-cv-datacentric-cv-12/data/
+*.jpg
+*.json
+*.csv
+*.png
+*.pth
+._.DS_Store
+code/baseline
+*.log
+code/wandb
+*.txt
+*.pyc
+/code/baseline
+/wandb
+*/code/__pycahce__
