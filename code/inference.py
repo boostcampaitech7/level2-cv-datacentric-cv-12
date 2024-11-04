@@ -24,6 +24,7 @@ def parse_args():
     parser.add_argument('--data_dir', default=os.environ.get('SM_CHANNEL_EVAL', 'data'))
     parser.add_argument('--model_dir', default=os.environ.get('SM_CHANNEL_MODEL', 'trained_models'))
     parser.add_argument('--output_dir', default=os.environ.get('SM_OUTPUT_DATA_DIR', 'predictions'))
+    parser.add_argument('--ckpt_path', required=True, help='Path to the checkpoint file')
 
     parser.add_argument('--device', default='cuda' if cuda.is_available() else 'cpu')
     parser.add_argument('--input_size', type=int, default=2048)
@@ -139,8 +140,8 @@ def main(args):
     model = EAST(pretrained=False).to(args.device)
 
     # 체크포인트 파일 경로 설정
-    ckpt_fpath = osp.join(args.model_dir, 'remove_line_baseData_aug_2024-11-02_16-14-10_training_log_epoch150.pth')
-
+    ckpt_fpath = args.ckpt_path
+    
     if not osp.exists(args.output_dir):
         os.makedirs(args.output_dir)
 
