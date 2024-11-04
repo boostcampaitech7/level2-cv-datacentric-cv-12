@@ -376,7 +376,7 @@ class SceneTextDataset(Dataset):
         total_anno = dict(images=dict())
         for nation in self._lang_list:
             # 실험을 위해 점선을 지운 json을 활용하고 있습니다.
-            with open(osp.join(root_dir, '{}_receipt/ufo/{}_remove.json'.format(nation, split)), 'r', encoding='utf-8') as f:
+            with open(osp.join(root_dir, '{}_receipt/ufo/{}.json'.format(nation, split)), 'r', encoding='utf-8') as f:
                 anno = json.load(f)
             for im in anno['images']:
                 total_anno['images'][im] = anno['images'][im]
