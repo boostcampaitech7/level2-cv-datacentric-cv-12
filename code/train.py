@@ -23,16 +23,13 @@ import random
 
 def parse_args():
     parser = ArgumentParser()
-
     # Conventional args
     parser.add_argument('--data_dir', type=str,
                         default=os.environ.get('SM_CHANNEL_TRAIN', 'data'))
     parser.add_argument('--model_dir', type=str, default=os.environ.get('SM_MODEL_DIR',
                                                                         'trained_models'))
-
     parser.add_argument('--device', default='cuda' if cuda.is_available() else 'cpu')
     parser.add_argument('--num_workers', type=int, default=8)
-
     parser.add_argument('--image_size', type=int, default=2048)
     parser.add_argument('--input_size', type=int, default=1024)
     parser.add_argument('--batch_size', type=int, default=8)
@@ -230,7 +227,6 @@ def do_training(data_dir, model_dir, device, image_size, input_size, num_workers
             print(f"Error visualizing images: {e}")
 
         # 체크포인트 저장
-        # 체크포인트 저장
         if (epoch + 1) % save_interval == 0:
             ckpt_fpath = osp.join(model_dir, f'{run_name}_{timestamp}_training_log_epoch{epoch + 1}.pth')
             torch.save(model.state_dict(), ckpt_fpath)
@@ -243,12 +239,9 @@ def do_training(data_dir, model_dir, device, image_size, input_size, num_workers
             print(f'Checkpoint saved and uploaded to wandb: {ckpt_fpath}')
 
     # 로그 파일 닫기 및 wandb 종료는 루프 밖에서 처리
-    # 로그 파일 닫기
     log_file.close()
     # wandb 종료
     wandb.finish()
-
-
 
 
 def main(args):
