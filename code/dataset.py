@@ -442,16 +442,24 @@ class SceneTextDataset(Dataset):
         funcs = []
         if self.color_jitter:
             funcs.append(A.ColorJitter())
-        if self.normalize:
-            funcs.append(A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
         # GrayScale 변환 추가하기   
         funcs.append(A.ToGray(always_apply=True))
-        funcs.append(SaltPepperNoise(amount=0.001, p=0.3)) # salt and papper 추가
-        funcs.append(A.GaussianBlur(blur_limit=(1,3), p=0.5)) # Gaussian papper 추가
+
+        funcs.append(SaltPepperNoise(amount=0.001, p=0.5)) # salt and pepper 추가
+
+
+        if self.normalize:
+            funcs.append(A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
+
+        # funcs.append(A.GaussianBlur(blur_limit=(1,3), p=0.5)) # Gaussian papper 추가
+
+
         transform = A.Compose(funcs)
 
         image = transform(image=image)['image']
         word_bboxes = np.reshape(vertices, (-1, 4, 2))
         roi_mask = generate_roi_mask(image, vertices, labels)
+
+
 
         return image, word_bboxes, roi_mask
