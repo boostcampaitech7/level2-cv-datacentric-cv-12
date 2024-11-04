@@ -1,6 +1,6 @@
 ---
 name: Docs Request
-about: Report an Help in the project
+about: Report an documentation in the project
 title: "[DOCS] "
 labels: documentation
 assignees: ''
