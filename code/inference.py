@@ -6,7 +6,6 @@ from glob import glob
 
 import torch
 import cv2
-import random
 import numpy as np
 import matplotlib.pyplot as plt
 from torch import cuda
@@ -57,31 +56,19 @@ def remove_shadow(image):
     result_norm = cv2.merge(result_planes)
     return result_norm
 
-def apply_otsu_threshold(gray_image):
-    """
-    그레이스케일 이미지에 Otsu의 이진화 적용.
-    """
-    _, otsu_image = cv2.threshold(gray_image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    return otsu_image
+# def apply_otsu_threshold(gray_image):
+#     """
+#     그레이스케일 이미지에 Otsu의 이진화 적용.
+#     """
+#     _, otsu_image = cv2.threshold(gray_image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+#     return otsu_image
 
-
-
-def apply_clahe(gray_image, clip_limit=2.0, tile_grid_size=(8, 8)):
-    """
-    그레이스케일 이미지에 CLAHE를 적용하여 대비를 향상시킵니다.
-    
-    Args:
-        gray_image (numpy.ndarray): 그레이스케일 이미지.
-        clip_limit (float): CLAHE의 클립 한계. 기본값은 2.0.
-        tile_grid_size (tuple): CLAHE의 타일 그리드 크기. 기본값은 (8, 8).
-    
-    Returns:
-        numpy.ndarray: CLAHE가 적용된 이미지.
-    """
-    clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
-    return clahe.apply(gray_image)
-
-
+# def apply_clahe(gray_image, clip_limit=2.0, tile_grid_size=(8, 8)):
+#     """
+#     그레이스케일 이미지에 CLAHE를 적용하여 대비를 향상시킵니다.
+#     """
+#     clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
+#     return clahe.apply(gray_image)
 
 def do_inference(model, ckpt_fpath, data_dir, input_size, batch_size, split='test', output_dir='predictions'):
     model.load_state_dict(torch.load(ckpt_fpath, map_location='cpu'))
@@ -107,33 +94,27 @@ def do_inference(model, ckpt_fpath, data_dir, input_size, batch_size, split='tes
             continue
         image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         
+        # 그림자 제거 전 그레이스케일 변환
+        gray = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2GRAY)
+        
         # 그림자 제거
-        shadow_removed = remove_shadow(image_rgb)
-        
-        # 그레이스케일로 변환
-        gray = cv2.cvtColor(shadow_removed, cv2.COLOR_RGB2GRAY)
-        
-        # CLAHE 적용
-        enhanced = apply_clahe(gray)  # 또는 직접 적용: enhanced = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8)).apply(gray)
-        
-        # Otsu 이진화 적용
-        otsu = apply_otsu_threshold(enhanced)
+        shadow_removed = remove_shadow(cv2.cvtColor(image_rgb, cv2.COLOR_BGR2RGB))
         
         # 다시 3채널로 변환하여 모델 입력 형식 유지
-        otsu_3ch = cv2.cvtColor(otsu, cv2.COLOR_GRAY2RGB)
+        shadow_removed_3ch = cv2.cvtColor(shadow_removed, cv2.COLOR_BGR2RGB)
         
-        images.append(otsu_3ch)
+        images.append(shadow_removed_3ch)
 
         # 첫 번째 이미지 시각화
         if not first_image_processed:
-            # 파일로 저장 (f-string 사용)
+            # 파일로 저장
             sample_image_path = osp.join(output_dir, f'{base_name}_sample_input_image.png')
-            cv2.imwrite(sample_image_path, cv2.cvtColor(otsu_3ch, cv2.COLOR_RGB2BGR))
+            cv2.imwrite(sample_image_path, cv2.cvtColor(shadow_removed_3ch, cv2.COLOR_RGB2BGR))
             print(f'Sample input image saved to {sample_image_path}')
 
             # 화면에 표시하려면 아래 주석을 제거하세요
-            # plt.imshow(otsu_3ch)
-            # plt.title('Sample Input Image (Grayscale + Shadow Removed + Otsu)')
+            # plt.imshow(shadow_removed_3ch)
+            # plt.title('Sample Input Image (Grayscale + Shadow Removed)')
             # plt.axis('off')
             # plt.show()
 
@@ -158,7 +139,7 @@ def main(args):
     model = EAST(pretrained=False).to(args.device)
 
     # 체크포인트 파일 경로 설정
-    ckpt_fpath = osp.join(args.model_dir, 'checkpoint_epoch_9.pth')
+    ckpt_fpath = osp.join(args.model_dir, 'remove_line_baseData_aug_2024-11-02_16-14-10_training_log_epoch150.pth')
 
     if not osp.exists(args.output_dir):
         os.makedirs(args.output_dir)
