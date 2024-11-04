@@ -66,6 +66,7 @@ def calc_deteval_metrics(pred_bboxes_dict, gt_bboxes_dict,
                 cont = cont +1
         return cont
 
+
     def num_overlaps_det(detNum):
         cont = 0
         for gtNum in range(len(recallMat)):
