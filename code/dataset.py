@@ -335,47 +335,29 @@ def filter_vertices(vertices, labels, ignore_under=0, drop_under=0):
 
     return new_vertices, new_labels
 
-
-class AddSaltAndPepperNoise(ImageOnlyTransform):
-    """
-    이미지에 솔트 앤 페퍼 노이즈를 추가하는 커스텀 변환 클래스입니다.
-    """
-    def __init__(self, always_apply=False, p=0.5):
-        super(AddSaltAndPepperNoise, self).__init__(always_apply, p)
+class SaltPepperNoise(ImageOnlyTransform):
+    def __init__(self, amount=0.005, always_apply=False, p=0.5):
+        super(SaltPepperNoise, self).__init__(always_apply=always_apply, p=p)
+        self.amount = amount
 
     def apply(self, image, **params):
-        # 이미지의 높이와 너비를 가져옵니다.
-        if image.ndim > 2:  # 컬러 이미지인 경우
-            height, width, channels = image.shape
-        else:  # 그레이스케일 이미지인 경우
-            height, width = image.shape
+        row, col, ch = image.shape
+        out = np.copy(image)
 
-        result = image.copy()
+        # Salt (흰색 픽셀) 추가
+        num_salt = np.ceil(self.amount * image.size * 0.5)
+        coords = [np.random.randint(0, i - 1, int(num_salt)) for i in image.shape]
+        out[coords[0], coords[1], :] = 255
 
-        # 노이즈를 추가할 픽셀 수를 결정합니다.
-        # 픽셀 수는 전체 픽셀의 1%에서 10% 사이로 설정합니다.
-        number_of_pixels = randint(int(height * width / 100), int(height * width / 10))
+        # Pepper (검은색 픽셀) 추가
+        num_pepper = np.ceil(self.amount * image.size * 0.5)
+        coords = [np.random.randint(0, i - 1, int(num_pepper)) for i in image.shape]
+        out[coords[0], coords[1], :] = 0
 
-        # 흰색(소금) 노이즈를 추가합니다.
-        for _ in range(number_of_pixels):
-            # 랜덤한 위치를 선택합니다.
-            y_coord = randint(0, height - 1)
-            x_coord = randint(0, width - 1)
-            if result.ndim > 2:
-                result[y_coord, x_coord] = [255, 255, 255]  # 흰색 픽셀
-            else:
-                result[y_coord, x_coord] = 255
+        return out
 
-        # 검은색(페퍼) 노이즈를 추가합니다.
-        for _ in range(number_of_pixels):
-            y_coord = randint(0, height - 1)
-            x_coord = randint(0, width - 1)
-            if result.ndim > 2:
-                result[y_coord, x_coord] = [0, 0, 0]  # 검은색 픽셀
-            else:
-                result[y_coord, x_coord] = 0
-
-        return result
+    def get_transform_init_args_names(self):
+        return ("amount",)
 
 class SceneTextDataset(Dataset):
     def __init__(self, root_dir,
