@@ -49,6 +49,10 @@ def parse_args():
     parser.add_argument('--log_checkpoint_dir', type=str, default=None,
                             help='로그와 체크포인트 파일 저장 경로. 지정하지 않으면 현재 시각 기반으로 생성됩니다.')
 
+        
+    # 미리 학습해논 가중치로 설정
+    parser.add_argument('--ckpt_path', default=None, help='Path to the checkpoint file')
+
     args = parser.parse_args()
 
     '''
@@ -122,6 +126,15 @@ def do_training(data_dir, model_dir, device, image_size, input_size, num_workers
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model = EAST()
     model.to(device)
+    
+    # 체크포인트 파일 경로 설정
+    ckpt_fpath = args.ckpt_path
+
+    if ckpt_fpath:
+        # Extractor의 가중치에 직접 할당
+        ckpt_fpath = torch.load(ckpt_fpath)
+        model.extractor.features.load_state_dict(ckpt_fpath, strict=False)
+
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[max_epoch // 2], gamma=0.1)
 
