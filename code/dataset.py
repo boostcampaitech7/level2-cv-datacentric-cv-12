@@ -7,9 +7,11 @@ import torch
 import numpy as np
 import cv2
 import albumentations as A
+from albumentations.core.transforms_interface import ImageOnlyTransform  # 추가된 부분
 from torch.utils.data import Dataset
 from shapely.geometry import Polygon
 from numba import njit
+from random import randint
 
 @njit
 def cal_distance(x1, y1, x2, y2):
@@ -218,6 +220,7 @@ def adjust_height(img, vertices, ratio=0.2):
         new_vertices[:, [1,3,5,7]] = vertices[:, [1,3,5,7]] * (new_h / old_h)
     return img, new_vertices
 
+
 def rotate_img(img, vertices, angle_range=5):
     '''이미지 회전하여 데이터 증강'''
     center_x = (img.width - 1) / 2
@@ -256,6 +259,7 @@ def filter_vertices(vertices, labels, ignore_under=0, drop_under=0):
     return new_vertices, new_labels
 
 from albumentations.core.transforms_interface import ImageOnlyTransform
+
 class SaltPepperNoise(ImageOnlyTransform):
     def __init__(self, amount=0.005, always_apply=False, p=0.5):
         super(SaltPepperNoise, self).__init__(always_apply=always_apply, p=p)
@@ -287,7 +291,7 @@ class SceneTextDataset(Dataset):
                  crop_size=1024,
                  ignore_under_threshold=10,
                  drop_under_threshold=1,
-                 color_jitter=False,
+                 color_jitter=True,
                  normalize=True):
         self._lang_list = ['chinese', 'japanese', 'thai', 'vietnamese']
         self.root_dir = root_dir
@@ -321,6 +325,7 @@ class SceneTextDataset(Dataset):
             lang = 'vietnamese'
         else:
             raise ValueError("알 수 없는 언어 인디케이터: {}".format(lang_indicator))
+
         return osp.join(self.root_dir, f'{lang}_receipt', 'img', self.split)
 
     def __len__(self):
@@ -350,29 +355,32 @@ class SceneTextDataset(Dataset):
         image, vertices = resize_img(image, vertices, self.image_size)
         image, vertices = adjust_height(image, vertices)
         image, vertices = rotate_img(image, vertices)
+
         # 중앙 크롭으로 변경
         image, vertices = crop_img_center(image, vertices, labels, self.crop_size)
+
 
         if image.mode != 'RGB':
             image = image.convert('RGB')
         image = np.array(image)
 
+
         funcs = []
         if self.color_jitter:
             funcs.append(A.ColorJitter())
-        # GrayScale 변환 추가
+       
         funcs.append(A.ToGray(always_apply=True))
-
-        funcs.append(SaltPepperNoise(amount=0.001, p=0.5))  # salt and pepper 노이즈 추가
-
+        funcs.append(SaltPepperNoise(amount=0.001, p=0.5))  # salt and pepper 노이즈 추
+        funcs.append(A.GaussianBlur(blur_limit=(1,3), p=0.5)) # Gaussian pepper 추가
+        
+        
         if self.normalize:
             funcs.append(A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
-
-        # GaussianBlur 추가 가능
-        # funcs.append(A.GaussianBlur(blur_limit=(1,3), p=0.5)) 
+        
 
         transform = A.Compose(funcs)
 
+        # 이미지에 변환을 적용합니다.
         image = transform(image=image)['image']
         word_bboxes = np.reshape(vertices, (-1, 4, 2))
         roi_mask = generate_roi_mask(image, vertices, labels)
