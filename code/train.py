@@ -49,6 +49,10 @@ def parse_args():
     parser.add_argument('--log_checkpoint_dir', type=str, default=None,
                             help='로그와 체크포인트 파일 저장 경로. 지정하지 않으면 현재 시각 기반으로 생성됩니다.')
 
+        
+    # 미리 학습해논 가중치로 설정
+    parser.add_argument('--ckpt_path', default=None, help='Path to the checkpoint file')
+
     args = parser.parse_args()
 
     '''
@@ -72,7 +76,7 @@ def parse_args():
     return args
 
 def do_training(data_dir, model_dir, device, image_size, input_size, num_workers, batch_size,
-                learning_rate, max_epoch, save_interval, project_name, run_name, log_checkpoint_dir):
+                learning_rate, max_epoch, save_interval, project_name, run_name, log_checkpoint_dir, ckpt_path):
 
     # wandb 인스턴스 생성
     wandb.init(project=project_name, name=run_name)
@@ -87,6 +91,7 @@ def do_training(data_dir, model_dir, device, image_size, input_size, num_workers
         'learning_rate': learning_rate,
         'max_epoch': max_epoch,
         'save_interval': save_interval,
+        'ckpt_path': ckpt_path
     })
 
     # 로그 및 체크포인트 디렉토리가 없는 경우 생성
@@ -122,10 +127,28 @@ def do_training(data_dir, model_dir, device, image_size, input_size, num_workers
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model = EAST()
     model.to(device)
+    
+    # 체크포인트 파일 경로 설정
+    ckpt_fpath = args.ckpt_path
+
+    if ckpt_fpath:
+        # Extractor의 가중치에 직접 할당
+        ckpt_fpath = torch.load(ckpt_fpath)
+        model.extractor.features.load_state_dict(ckpt_fpath, strict=False)
+
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[max_epoch // 2], gamma=0.1)
 
     model.train()
+    
+    # 사전 학습된 가중치에 접근
+    pretrained_weights = model.extractor.features.state_dict()
+
+    # 가중치의 키(파라미터 이름)와 크기를 출력
+    print("사전 학습된 가중치:")
+    for name, param in pretrained_weights.items():
+        print(f"{name}: {param.shape}")
+
     for epoch in range(max_epoch):
         epoch_loss, epoch_start = 0, time.time()
 
