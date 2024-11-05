@@ -76,7 +76,7 @@ def parse_args():
     return args
 
 def do_training(data_dir, model_dir, device, image_size, input_size, num_workers, batch_size,
-                learning_rate, max_epoch, save_interval, project_name, run_name, log_checkpoint_dir):
+                learning_rate, max_epoch, save_interval, project_name, run_name, log_checkpoint_dir, ckpt_path):
 
     # wandb 인스턴스 생성
     wandb.init(project=project_name, name=run_name)
@@ -91,6 +91,7 @@ def do_training(data_dir, model_dir, device, image_size, input_size, num_workers
         'learning_rate': learning_rate,
         'max_epoch': max_epoch,
         'save_interval': save_interval,
+        'ckpt_path': ckpt_path
     })
 
     # 로그 및 체크포인트 디렉토리가 없는 경우 생성
@@ -139,6 +140,15 @@ def do_training(data_dir, model_dir, device, image_size, input_size, num_workers
     scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[max_epoch // 2], gamma=0.1)
 
     model.train()
+    
+    # 사전 학습된 가중치에 접근
+    pretrained_weights = model.extractor.features.state_dict()
+
+    # 가중치의 키(파라미터 이름)와 크기를 출력
+    print("사전 학습된 가중치:")
+    for name, param in pretrained_weights.items():
+        print(f"{name}: {param.shape}")
+
     for epoch in range(max_epoch):
         epoch_loss, epoch_start = 0, time.time()
 
