@@ -7,9 +7,11 @@ import torch
 import numpy as np
 import cv2
 import albumentations as A
+from albumentations.core.transforms_interface import ImageOnlyTransform  # 추가된 부분
 from torch.utils.data import Dataset
 from shapely.geometry import Polygon
 from numba import njit
+from random import randint
 
 @njit
 def cal_distance(x1, y1, x2, y2):
@@ -288,7 +290,7 @@ def adjust_height(img, vertices, ratio=0.2):
     return img, new_vertices
 
 
-def rotate_img(img, vertices, angle_range=5):
+def rotate_img(img, vertices, angle_range=10):
     '''rotate image [-10, 10] degree to aug data
     Input:
         img         : PIL Image
@@ -334,32 +336,46 @@ def filter_vertices(vertices, labels, ignore_under=0, drop_under=0):
     return new_vertices, new_labels
 
 
-from albumentations.core.transforms_interface import ImageOnlyTransform
-class SaltPepperNoise(ImageOnlyTransform):
-    def __init__(self, amount=0.005, always_apply=False, p=0.5):
-        super(SaltPepperNoise, self).__init__(always_apply=always_apply, p=p)
-        self.amount = amount
+class AddSaltAndPepperNoise(ImageOnlyTransform):
+    """
+    이미지에 솔트 앤 페퍼 노이즈를 추가하는 커스텀 변환 클래스입니다.
+    """
+    def __init__(self, always_apply=False, p=0.5):
+        super(AddSaltAndPepperNoise, self).__init__(always_apply, p)
 
     def apply(self, image, **params):
-        row, col, ch = image.shape
-        out = np.copy(image)
+        # 이미지의 높이와 너비를 가져옵니다.
+        if image.ndim > 2:  # 컬러 이미지인 경우
+            height, width, channels = image.shape
+        else:  # 그레이스케일 이미지인 경우
+            height, width = image.shape
 
-        # Salt (흰색 픽셀) 추가
-        num_salt = np.ceil(self.amount * image.size * 0.5)
-        coords = [np.random.randint(0, i - 1, int(num_salt)) for i in image.shape]
-        out[coords[0], coords[1], :] = 255
+        result = image.copy()
 
-        # Pepper (검은색 픽셀) 추가
-        num_pepper = np.ceil(self.amount * image.size * 0.5)
-        coords = [np.random.randint(0, i - 1, int(num_pepper)) for i in image.shape]
-        out[coords[0], coords[1], :] = 0
+        # 노이즈를 추가할 픽셀 수를 결정합니다.
+        # 픽셀 수는 전체 픽셀의 1%에서 10% 사이로 설정합니다.
+        number_of_pixels = randint(int(height * width / 100), int(height * width / 10))
 
-        return out
+        # 흰색(소금) 노이즈를 추가합니다.
+        for _ in range(number_of_pixels):
+            # 랜덤한 위치를 선택합니다.
+            y_coord = randint(0, height - 1)
+            x_coord = randint(0, width - 1)
+            if result.ndim > 2:
+                result[y_coord, x_coord] = [255, 255, 255]  # 흰색 픽셀
+            else:
+                result[y_coord, x_coord] = 255
 
-    def get_transform_init_args_names(self):
-        return ("amount",)
-    
+        # 검은색(페퍼) 노이즈를 추가합니다.
+        for _ in range(number_of_pixels):
+            y_coord = randint(0, height - 1)
+            x_coord = randint(0, width - 1)
+            if result.ndim > 2:
+                result[y_coord, x_coord] = [0, 0, 0]  # 검은색 픽셀
+            else:
+                result[y_coord, x_coord] = 0
 
+        return result
 
 class SceneTextDataset(Dataset):
     def __init__(self, root_dir,
@@ -368,15 +384,14 @@ class SceneTextDataset(Dataset):
                  crop_size=1024,
                  ignore_under_threshold=10,
                  drop_under_threshold=1,
-                 color_jitter=False,
+                 color_jitter=True,
                  normalize=True):
         self._lang_list = ['chinese', 'japanese', 'thai', 'vietnamese']
         self.root_dir = root_dir
         self.split = split
         total_anno = dict(images=dict())
         for nation in self._lang_list:
-            # 실험을 위해 점선을 지운 json을 활용하고 있습니다.
-            with open(osp.join(root_dir, '{}_receipt/ufo/{}_remove.json'.format(nation, split)), 'r', encoding='utf-8') as f:
+            with open(osp.join(root_dir, f'{nation}_receipt/ufo/{split}.json'), 'r', encoding='utf-8') as f:
                 anno = json.load(f)
             for im in anno['images']:
                 total_anno['images'][im] = anno['images'][im]
@@ -401,8 +416,9 @@ class SceneTextDataset(Dataset):
         elif lang_indicator == 'vi':
             lang = 'vietnamese'
         else:
-            raise ValueError
+            raise ValueError(f"Unsupported language indicator: {lang_indicator}")
         return osp.join(self.root_dir, f'{lang}_receipt', 'img', self.split)
+
     def __len__(self):
         return len(self.image_fnames)
 
@@ -432,24 +448,23 @@ class SceneTextDataset(Dataset):
         image, vertices = rotate_img(image, vertices)
         image, vertices = crop_img(image, vertices, labels, self.crop_size)
 
-
         if image.mode != 'RGB':
             image = image.convert('RGB')
         image = np.array(image)
 
-    
-
+        # 증강 변환 목록을 정의합니다.
         funcs = []
         if self.color_jitter:
             funcs.append(A.ColorJitter())
+        # 그레이스케일 변환을 추가합니다.
+        funcs.append(A.ToGray(p=1.0))
+        # 솔트 앤 페퍼 노이즈를 추가하는 커스텀 변환을 추가합니다.
+        funcs.append(AddSaltAndPepperNoise(p=1.0))
         if self.normalize:
             funcs.append(A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
-        # GrayScale 변환 추가하기   
-        funcs.append(A.ToGray(always_apply=True))
-        funcs.append(SaltPepperNoise(amount=0.001, p=0.3)) # salt and papper 추가
-        funcs.append(A.GaussianBlur(blur_limit=(1,3), p=0.5)) # Gaussian papper 추가
         transform = A.Compose(funcs)
 
+        # 이미지에 변환을 적용합니다.
         image = transform(image=image)['image']
         word_bboxes = np.reshape(vertices, (-1, 4, 2))
         roi_mask = generate_roi_mask(image, vertices, labels)
