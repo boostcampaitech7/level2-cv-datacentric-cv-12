@@ -391,7 +391,8 @@ class SceneTextDataset(Dataset):
         self.split = split
         total_anno = dict(images=dict())
         for nation in self._lang_list:
-            with open(osp.join(root_dir, f'{nation}_receipt/ufo/{split}.json'), 'r', encoding='utf-8') as f:
+            # 실험을 위해 점선을 지운 json을 활용하고 있습니다.
+            with open(osp.join(root_dir, '{}_receipt/ufo/{}.json'.format(nation, split)), 'r', encoding='utf-8') as f:
                 anno = json.load(f)
             for im in anno['images']:
                 total_anno['images'][im] = anno['images'][im]
@@ -456,12 +457,18 @@ class SceneTextDataset(Dataset):
         funcs = []
         if self.color_jitter:
             funcs.append(A.ColorJitter())
-        # 그레이스케일 변환을 추가합니다.
-        funcs.append(A.ToGray(p=1.0))
-        # 솔트 앤 페퍼 노이즈를 추가하는 커스텀 변환을 추가합니다.
-        funcs.append(AddSaltAndPepperNoise(p=1.0))
+        # GrayScale 변환 추가하기   
+        funcs.append(A.ToGray(always_apply=True))
+
+        funcs.append(SaltPepperNoise(amount=0.001, p=0.5)) # salt and pepper 추가
+
+
         if self.normalize:
             funcs.append(A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
+        # GrayScale 변환 추가하기   
+        funcs.append(A.ToGray(always_apply=True))
+        funcs.append(SaltPepperNoise(amount=0.001, p=0.3)) # salt and papper 추가
+        funcs.append(A.GaussianBlur(blur_limit=(1,3), p=0.5)) # Gaussian papper 추가
         transform = A.Compose(funcs)
 
         # 이미지에 변환을 적용합니다.
