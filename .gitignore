@@ -2,7 +2,7 @@
 *.jpg
 *.json
 *.csv
-# *.png
+*.png
 *.pth
 ._.DS_Store
 code/baseline
