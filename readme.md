@@ -39,8 +39,28 @@
 - **Deep Learning Framework**: PyTorch, CUDA 지원 활성화
 
 <br><br>
+# 🦂프로젝트 파일 구조
+| Path                                | Description                  |
+|-------------------------------------|------------------------------|
+| `artifacts_download.ipynb`          | artifact를 다운받는 파일 |
+| `code/`                             | 코드들이 저장되어있는 폴더          |
+| ├── `data/`                         | 데이터들이 저장되어있는 폴더               |
+| │   ├── `dataset.py`                | 데이터 Handle 함수들 정의 파일      |
+| │   ├── `deteval.py`                | deteval 파일            |
+| │   ├── `inference.py`              | Inference 파일             |
+| │   ├── `requirements.txt`          | 환경설정 파일          |
+| │   └── `train.py`                  | Training 파일      |
+| `make_json.ipynb`                   | 새로운 json을 만드는 파일   |
+| `readme.md`                         | Project documentation        |
+| `visualization_inference.ipynb`     | 모델의 결과를 시각화 하는 파일 |
 
+<br><br>
+# 🦎필요한 라이브러리 설치
+```bash
+pip install -r requirements.txt
+```
 
+<br><br>
 # 🦅 모델 학습 방법
 *대회 규정상 baseline 코드는 .gitignore에 포함되어 현재 코드에 포함되어있지 않습니다*
 
@@ -104,3 +124,23 @@ nohup python trian.py --max_epoch 300 --save_interval 20 --project_name "Train E
 
 ```
 python inference.py --ckpt_path ./checkpoints/model.pth
+```
+
+# 🦇wandb
+<p align="center">
+  <img src="image-1.png" alt="alt text" width="80%">
+</p>
+
+
+<div align="center">
+  <p>
+    <img src="image-2.png" alt="alt text" width="60%">
+  </p>
+  <p>
+    <img src="image-3.png" alt="alt text" width="60%">
+  </p>
+</div>
+
+---
+wandb에서 cls loss, iou loss, angle loss 등을 시각화 하였고, Model에 들어가는 이미지 10장을 랜덤으로 시각화 하여 Data Augmentation이 잘 적용되었는지 시각적으로 확인을 진행하였습니다.
+
