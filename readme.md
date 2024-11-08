@@ -126,6 +126,26 @@ nohup python trian.py --max_epoch 300 --save_interval 20 --project_name "Train E
 python inference.py --ckpt_path ./checkpoints/model.pth
 ```
 
+<br><br>
+# 🦖 앙상블 방법
+### 명령줄 인자 설명
+
+| 인자명                | 타입      | 기본값                  | 설명 |
+|-----------------------|-----------|-------------------------|------|
+| `--mode`              | `str`     | **필수 입력**           | 모드 설정. `opt` 입력 시 앙상블 파라미터 최적화, `ensemble` 입력 시 앙상블 수행 |
+| `--input_dir`         | `str`     | **필수 입력**           | 앙상블 대상 output 파일들이 저장된 디렉토리 경로|
+| `--output_dir`        | `str`     | **필수 입력**           | 앙상블 결과를 저장할 디렉토리 경로|
+| `--iou_threshold`     | `str`     | **필수 입력**           | 앙상블 대상 output 파일들의 box를 취합 후 `iou_threshold` 이상 겹치는 box들을 하나로 병합하는 임계값 (0~1 사이 값)|
+| `--vote_count`        | `str`     | **필수 입력**           | 앙상블 시 박스를 최종적으로 채택하기 위해 필요한 최소 모델 수|
+
+### 예제 사용법
+
+
+```
+python ensemble.py --mode opt
+python ensemble.py --mode ensemble --input_dir ./predictions --output_dir ./ensemble_result --iou_threshold 0.5 --vote_count 3
+```
+
 # 🦇wandb
 <p align="center">
   <img src="image-1.png" alt="alt text" width="80%">
