@@ -36,34 +36,23 @@ def parse_args():
     parser.add_argument('--learning_rate', type=float, default=1e-3)
     parser.add_argument('--max_epoch', type=int, default=300)
     parser.add_argument('--save_interval', type=int, default=10)
-
-    '''
-        wandb 관련 parser를 정의합니다.
-    '''
     parser.add_argument('--project_name', type=str, default='이름 미지정 프로젝트',
                         help='wandb 프로젝트 이름')
     parser.add_argument('--run_name', type=str, default=None,
                         help='wandb 실행 이름')
-
     # 학습 진행 상황 로그 및 체크포인트가 저장되는 폴더를 설정해줍니다.
     parser.add_argument('--log_checkpoint_dir', type=str, default=None,
                             help='로그와 체크포인트 파일 저장 경로. 지정하지 않으면 현재 시각 기반으로 생성됩니다.')
-
-        
     # 미리 학습해논 가중치로 설정
     parser.add_argument('--ckpt_path', default=None, help='Path to the checkpoint file')
 
     args = parser.parse_args()
 
-    '''
-        만일 wandb run name을 지정하지 않았다면 현재 시간을 기준으로 이름을 설정하게 됩니다.
-    '''
+    # wandb run name 을 지정하지 않았다면, 현재 시간을 기준으로 이름을 설정 
     if args.run_name is None:
         args.run_name = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-    '''
-        만일 log_checkpoint_dir 또는 model_dir이 지정되지 않았다면 현재 시각을 기반으로 디렉토리 이름을 생성합니다.
-    '''
+    # log_checkpoint_dir 또는 model_dir 이 지정되지 않았다면, 현재 시각을 기반으로 디렉토리 이름으로 생성 
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     if args.log_checkpoint_dir is None:
@@ -108,7 +97,7 @@ def do_training(data_dir, model_dir, device, image_size, input_size, num_workers
     log_file_path = osp.join(log_checkpoint_dir, log_file_name)
     log_file = open(log_file_path, 'a')
 
-    # 데이터셋 로딩 (SceneTextDataset)
+    # dataset loading 
     dataset = SceneTextDataset(
         data_dir,
         split='train',
@@ -128,7 +117,7 @@ def do_training(data_dir, model_dir, device, image_size, input_size, num_workers
     model = EAST()
     model.to(device)
     
-    # 체크포인트 파일 경로 설정
+    # 체크포인트 파일 경로 수정 
     ckpt_fpath = args.ckpt_path
 
     if ckpt_fpath:
@@ -141,7 +130,7 @@ def do_training(data_dir, model_dir, device, image_size, input_size, num_workers
 
     model.train()
     
-    # 사전 학습된 가중치에 접근
+    # pretrained_weights 에 접근 
     pretrained_weights = model.extractor.features.state_dict()
 
     # 가중치의 키(파라미터 이름)와 크기를 출력
