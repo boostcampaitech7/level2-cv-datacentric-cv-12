@@ -12,7 +12,8 @@ from skopt.space import Real, Integer
 from skopt.utils import use_named_args
 
 # Load ground truth data
-with open('/data/ephemeral/home/level2-cv-datacentric-cv-12/code/test.json', 'r') as f:
+val_json_path = 'Enter your validation json path'
+with open(val_json_path, 'r') as f:
     gt_data = json.load(f)
 
 gt_bboxes_dict = {}
@@ -140,8 +141,7 @@ def objective(iou_threshold, vote_count):
     """
     print(f"Current parameters: iou_threshold={iou_threshold:.4f}, vote_count={vote_count}")
 
-    input_dir = "/data/ephemeral/home/level2-cv-datacentric-cv-12/code/pred"
-    csv_paths = sorted(glob(os.path.join(input_dir, '*.csv')))
+    csv_paths = sorted(glob(os.path.join(args.input_dir, '*.csv')))
     ensemble_result = ensemble_detections(csv_paths, iou_threshold, vote_count)
     f1_score = calculate_f1(ensemble_result)
     return -f1_score  # Negative for maximization problem
@@ -150,10 +150,9 @@ def run_optimization(args):
     """
     Run Bayesian optimization to find optimal parameters
     """
-    input_dir = '/data/ephemeral/home/level2-cv-datacentric-cv-12/code/pred'
-    csv_paths = sorted(glob(os.path.join(input_dir, '*.csv')))
+    csv_paths = sorted(glob(os.path.join(args.input_dir, '*.csv')))
     if not csv_paths:
-        raise ValueError(f"No CSV files found in input directory: {input_dir}")
+        raise ValueError(f"No CSV files found in input directory: {args.input_dir}")
     
     res = gp_minimize(objective, 
                      [Real(0.3, 0.7, name='iou_threshold'), 
@@ -169,10 +168,9 @@ def run_ensemble(args):
     """
     Run ensemble with given or optimal parameters
     """
-    input_dir = '/data/ephemeral/home/level2-cv-datacentric-cv-12/code/pred'
-    csv_paths = sorted(glob(os.path.join(input_dir, '*.csv')))
+    csv_paths = sorted(glob(os.path.join(args.input_dir, '*.csv')))
     if not csv_paths:
-        raise ValueError(f"No CSV files found in input directory: {input_dir}")
+        raise ValueError(f"No CSV files found in input directory: {args.input_dir}")
     
     ensemble_result = ensemble_detections(csv_paths, args.iou_threshold, args.vote_count)
     
