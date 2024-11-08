@@ -2,7 +2,6 @@
 > **'Data Centric**' 관점에서 모델은 VGG 고정하여 진행하였습니다.
 
 이 프로젝트는 카메라로 촬영한 영수증 이미지에서 다국어 텍스트를 검출하는 것을 목표로 합니다. 최근 OCR 기술이 발전하면서 이미지에서 텍스트를 추출하는 다양한 솔루션이 등장했지만, 이 프로젝트에서는 모델 관점이 아닌 데이터 관점에서 문제를 해결하고자 합니다. 데이터를 최적화하여 더욱 정확하고 효율적인 텍스트 검출을 실현하는 것이 이번 프로젝트의 핵심 목표입니다.
-
 <br>
 
 # 💁🏼‍♂️💁‍♀️ Member 소개
@@ -16,14 +15,15 @@
 | **조현준** | - 점선관련 실험 진행 <br>  |
 ---
 
-<br><br>
+<br>
+
 # 🤜 팀의 목표
 - Git issue를 통해 일정 관리를 진행하자!
 - 데이터 관점에서 EDA를 통해 데이터 전처리 를 진행하자!
 - 결과를 시각화 하여 가설을 세우고 이를 검증하자! 
 - 가설 검증시 회의를 통해서 의견을 적극 제시하자!
 
-<br><br>
+<br>
 
 # 🖥️ 프로젝트 진행 환경
 
@@ -38,7 +38,8 @@
 - **Python Version**: 3.10.13
 - **Deep Learning Framework**: PyTorch, CUDA 지원 활성화
 
-<br><br>
+<br>
+
 # 🗂️ 프로젝트 파일 구조
 | Path                                | Description                  |
 |-------------------------------------|------------------------------|
@@ -54,13 +55,15 @@
 | `readme.md`                         | Project documentation        |
 | `visualization_inference.ipynb`     | 모델의 결과를 시각화 하는 파일 |
 
-<br><br>
+<br>
+
 # 🧰 필요한 라이브러리 설치
 ```bash
 pip install -r requirements.txt
 ```
 
-<br><br>
+<br>
+
 # 🦅 모델 학습 방법
 *대회 규정상 baseline 코드는 .gitignore에 포함되어 현재 코드에 포함되어있지 않습니다*
 
@@ -105,7 +108,8 @@ nohup을 통해 GPU 서버 background에서 돌리는 경우
 nohup python trian.py --max_epoch 300 --save_interval 20 --project_name "Train Example Project" --run_name 'proejct test run' > test_output.log 2>&1 &
 ```
 
-<br><br>
+<br>
+
 # 🦖 모델 추론 방법
 ### 명령줄 인자 설명
 
@@ -125,6 +129,7 @@ nohup python trian.py --max_epoch 300 --save_interval 20 --project_name "Train E
 ```
 python inference.py --ckpt_path ./checkpoints/model.pth
 ```
+<br>
 
 # 🦇wandb
 
