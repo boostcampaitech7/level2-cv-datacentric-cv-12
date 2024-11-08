@@ -3,7 +3,8 @@ from deteval import calc_deteval_metrics
 
 if __name__ == "__main__":
     # GT.json과 pred.json 파일을 읽어들입니다
-    with open('/data/ephemeral/home/level2-cv-datacentric-cv-12/code/test.json', 'r') as f:
+    val_json_path = 'Enter your validation json path'
+    with open(val_json_path, 'r') as f:
         gt_data = json.load(f)
 
     gt_bboxes_dict = {}
@@ -19,7 +20,8 @@ if __name__ == "__main__":
             bboxes.append(bbox)
         gt_bboxes_dict[img_name] = bboxes
 
-    with open('/data/ephemeral/home/level2-cv-datacentric-cv-12/code/legend_8412.csv', 'r') as f:
+    pred_json_path = 'Enter your prediction json path'
+    with open(pred_json_path, 'r') as f:
         pred_data = json.load(f)
 
     pred_bboxes_dict = {}
