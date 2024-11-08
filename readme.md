@@ -39,7 +39,7 @@
 - **Deep Learning Framework**: PyTorch, CUDA 지원 활성화
 
 <br><br>
-# 🦂프로젝트 파일 구조
+# 🗂️ 프로젝트 파일 구조
 | Path                                | Description                  |
 |-------------------------------------|------------------------------|
 | `artifacts_download.ipynb`          | artifact를 다운받는 파일 |
@@ -55,7 +55,7 @@
 | `visualization_inference.ipynb`     | 모델의 결과를 시각화 하는 파일 |
 
 <br><br>
-# 🦎필요한 라이브러리 설치
+# 🧰 필요한 라이브러리 설치
 ```bash
 pip install -r requirements.txt
 ```
@@ -127,19 +127,12 @@ python inference.py --ckpt_path ./checkpoints/model.pth
 ```
 
 # 🦇wandb
-<p align="center">
-  <img src="image-1.png" alt="alt text" width="80%">
-</p>
-
 
 <div align="center">
-  <p>
-    <img src="image-2.png" alt="alt text" width="60%">
-  </p>
-  <p>
-    <img src="image-3.png" alt="alt text" width="60%">
-  </p>
+  <img src="https://github.com/user-attachments/assets/a7f2e722-2a59-49a7-b192-ac3dc7cdd84e" width="80%">
+  <img src="https://github.com/user-attachments/assets/72302db7-1dd2-4a96-a44d-2f03d666a148" width="80%">
 </div>
+
 
 ---
 wandb에서 cls loss, iou loss, angle loss 등을 시각화 하였고, Model에 들어가는 이미지 10장을 랜덤으로 시각화 하여 Data Augmentation이 잘 적용되었는지 시각적으로 확인을 진행하였습니다.
