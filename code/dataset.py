@@ -7,20 +7,54 @@ import torch
 import numpy as np
 import cv2
 import albumentations as A
-from albumentations.core.transforms_interface import ImageOnlyTransform  # 추가된 부분
+from albumentations.core.transforms_interface import ImageOnlyTransform #saltandpepper  
 from torch.utils.data import Dataset
 from shapely.geometry import Polygon
 from numba import njit
 from random import randint
 
+# salt and pepper 를 추가해주기 위한 class 
+class SaltPepperNoise(ImageOnlyTransform):
+    def __init__(self, amount=0.005, always_apply=False, p=0.5):
+        super(SaltPepperNoise, self).__init__(always_apply=always_apply, p=p)
+        self.amount = amount
+
+    def apply(self, image, **params):
+        row, col, ch = image.shape
+        out = np.copy(image)
+
+        # Salt 추가 
+        num_salt = np.ceil(self.amount * image.size * 0.5)
+        coords = [np.random.randint(0, i - 1, int(num_salt)) for i in image.shape]
+        out[coords[0], coords[1], :] = 255
+
+        # Pepper 추가 
+        num_pepper = np.ceil(self.amount * image.size * 0.5)
+        coords = [np.random.randint(0, i - 1, int(num_pepper)) for i in image.shape]
+        out[coords[0], coords[1], :] = 0
+
+        return out
+
+    def get_transform_init_args_names(self):
+        return ("amount",)
+    
 @njit
 def cal_distance(x1, y1, x2, y2):
-    '''Euclidean 거리 계산'''
+    '''calculate the Euclidean distance'''
     return math.sqrt((x1 - x2)**2 + (y1 - y2)**2)
 
 @njit
 def move_points(vertices, index1, index2, r, coef):
-    '''두 점을 이동하여 엣지를 축소'''
+    '''move the two points to shrink edge
+    Input:
+        vertices: vertices of text region <numpy.ndarray, (8,)>
+        index1  : offset of point1
+        index2  : offset of point2
+        r       : [r1, r2, r3, r4] in paper
+        coef    : shrink ratio in paper
+    Output:
+        vertices: vertices where one edge has been shinked
+    '''
     index1 = index1 % 4
     index2 = index2 % 4
     x1_index = index1 * 2 + 0
@@ -44,7 +78,13 @@ def move_points(vertices, index1, index2, r, coef):
 
 @njit
 def shrink_poly(vertices, coef=0.3):
-    '''텍스트 영역 축소'''
+    '''shrink the text region
+    Input:
+        vertices: vertices of text region <numpy.ndarray, (8,)>
+        coef    : shrink ratio in paper
+    Output:
+        v       : vertices of shrinked text region <numpy.ndarray, (8,)>
+    '''
     x1, y1, x2, y2, x3, y3, x4, y4 = vertices
     r1 = min(cal_distance(x1,y1,x2,y2), cal_distance(x1,y1,x4,y4))
     r2 = min(cal_distance(x2,y2,x1,y1), cal_distance(x2,y2,x3,y3))
@@ -52,12 +92,12 @@ def shrink_poly(vertices, coef=0.3):
     r4 = min(cal_distance(x4,y4,x1,y1), cal_distance(x4,y4,x3,y3))
     r = [r1, r2, r3, r4]
 
-    # 이동할 오프셋 결정
+    # obtain offset to perform move_points() automatically
     if cal_distance(x1,y1,x2,y2) + cal_distance(x3,y3,x4,y4) > \
        cal_distance(x2,y2,x3,y3) + cal_distance(x1,y1,x4,y4):
-        offset = 0 # 두 긴 엣지: (x1,y1)-(x2,y2) & (x3,y3)-(x4,y4)
+        offset = 0 # two longer edges are (x1y1-x2y2) & (x3y3-x4y4)
     else:
-        offset = 1 # 두 긴 엣지: (x2,y2)-(x3,y3) & (x4,y4)-(x1,y1)
+        offset = 1 # two longer edges are (x2y2-x3y3) & (x4y4-x1y1)
 
     v = vertices.copy()
     v = move_points(v, 0 + offset, 1 + offset, r, coef)
@@ -68,11 +108,18 @@ def shrink_poly(vertices, coef=0.3):
 
 @njit
 def get_rotate_mat(theta):
-    '''회전 행렬 생성 (양의 theta는 시계 방향 회전)'''
+    '''positive theta value means rotate clockwise'''
     return np.array([[math.cos(theta), -math.sin(theta)], [math.sin(theta), math.cos(theta)]])
 
 def rotate_vertices(vertices, theta, anchor=None):
-    '''anchor를 중심으로 꼭짓점 회전'''
+    '''rotate vertices around anchor
+    Input:
+        vertices: vertices of text region <numpy.ndarray, (8,)>
+        theta   : angle in radian measure
+        anchor  : fixed position during rotation
+    Output:
+        rotated vertices <numpy.ndarray, (8,)>
+    '''
     v = vertices.reshape((4,2)).T
     if anchor is None:
         anchor = v[:,:1]
@@ -82,7 +129,12 @@ def rotate_vertices(vertices, theta, anchor=None):
 
 @njit
 def get_boundary(vertices):
-    '''주어진 꼭짓점을 둘러싼 경계 계산'''
+    '''get the tight boundary around given vertices
+    Input:
+        vertices: vertices of text region <numpy.ndarray, (8,)>
+    Output:
+        the boundary
+    '''
     x1, y1, x2, y2, x3, y3, x4, y4 = vertices
     x_min = min(x1, x2, x3, x4)
     x_max = max(x1, x2, x3, x4)
@@ -92,7 +144,13 @@ def get_boundary(vertices):
 
 @njit
 def cal_error(vertices):
-    '''기본 방향과의 차이 계산'''
+    '''default orientation is x1y1 : left-top, x2y2 : right-top, x3y3 : right-bot, x4y4 : left-bot
+    calculate the difference between the vertices orientation and default orientation
+    Input:
+        vertices: vertices of text region <numpy.ndarray, (8,)>
+    Output:
+        err     : difference measure
+    '''
     x_min, x_max, y_min, y_max = get_boundary(vertices)
     x1, y1, x2, y2, x3, y3, x4, y4 = vertices
     err = cal_distance(x1, y1, x_min, y_min) + cal_distance(x2, y2, x_max, y_min) + \
@@ -101,7 +159,12 @@ def cal_error(vertices):
 
 @njit
 def find_min_rect_angle(vertices):
-    '''최소 직사각형을 얻기 위한 최적의 회전 각도 찾기'''
+    '''find the best angle to rotate poly and obtain min rectangle
+    Input:
+        vertices: vertices of text region <numpy.ndarray, (8,)>
+    Output:
+        the best angle <radian measure>
+    '''  
     angle_interval = 1
     angle_list = list(range(-90, 90, angle_interval))
     area_list = []
@@ -116,7 +179,7 @@ def find_min_rect_angle(vertices):
     min_error = float('inf')
     best_index = -1
     rank_num = 10
-    # 올바른 방향으로 최소 오차를 가진 각도 찾기
+    # find the best angle with correct orientation
     for index in sorted_area_index[:rank_num]:
         rotated = rotate_vertices(vertices, angle_list[index] / 180 * math.pi)
         temp_error = cal_error(rotated)
@@ -126,7 +189,14 @@ def find_min_rect_angle(vertices):
     return angle_list[best_index] / 180 * math.pi
 
 def is_cross_text(start_loc, length, vertices):
-    '''크롭 영역이 텍스트 영역을 교차하는지 확인'''
+    '''check if the crop image crosses text regions
+    Input:
+        start_loc: left-top position
+        length   : length of crop image
+        vertices : vertices of text regions <numpy.ndarray, (n,8)>
+    Output:
+        True if crop image crosses text region
+    '''
     if vertices.size == 0:
         return False
     start_w, start_h = start_loc
@@ -139,20 +209,19 @@ def is_cross_text(start_loc, length, vertices):
         if 0.01 <= inter / p2.area <= 0.99:
             return True
     return False
-
-def crop_img_center(img, vertices, labels, length):
-    '''중앙을 기준으로 이미지 패치를 크롭
+def crop_img(img, vertices, labels, length):
+    '''crop img patches to obtain batch and augment
     Input:
         img         : PIL Image
-        vertices    : 텍스트 영역의 꼭짓점 <numpy.ndarray, (n,8)>
-        labels      : 1->유효, 0->무시 <numpy.ndarray, (n,)>
-        length      : 크롭할 이미지 영역의 크기
+        vertices    : vertices of text regions <numpy.ndarray, (n,8)>
+        labels      : 1->valid, 0->ignore, <numpy.ndarray, (n,)>
+        length      : length of cropped image region
     Output:
-        region       : 크롭된 이미지 영역
-        new_vertices : 크롭된 영역 내의 새로운 꼭짓점 좌표
+        region      : cropped image region
+        new_vertices: new vertices in cropped region
     '''
     h, w = img.height, img.width
-    # 이미지의 짧은 변이 크롭할 길이보다 작으면 리사이징
+    # confirm the shortest side of image >= length
     if h >= w and w < length:
         img = img.resize((length, int(h * length / w)), Image.BILINEAR)
     elif h < w and h < length:
@@ -163,28 +232,40 @@ def crop_img_center(img, vertices, labels, length):
 
     new_vertices = np.zeros(vertices.shape)
     if vertices.size > 0:
-        new_vertices[:, [0,2,4,6]] = vertices[:, [0,2,4,6]] * ratio_w
-        new_vertices[:, [1,3,5,7]] = vertices[:, [1,3,5,7]] * ratio_h
+        new_vertices[:,[0,2,4,6]] = vertices[:,[0,2,4,6]] * ratio_w
+        new_vertices[:,[1,3,5,7]] = vertices[:,[1,3,5,7]] * ratio_h
 
-    # 중앙 크롭 좌표 계산
-    start_w = (img.width - length) // 2
-    start_h = (img.height - length) // 2
-
+    # find random position
+    remain_h = img.height - length
+    remain_w = img.width - length
+    flag = True
+    cnt = 0
+    while flag and cnt < 1000:
+        cnt += 1
+        start_w = int(np.random.rand() * remain_w)
+        start_h = int(np.random.rand() * remain_h)
+        flag = is_cross_text([start_w, start_h], length, new_vertices[labels==1,:])
     box = (start_w, start_h, start_w + length, start_h + length)
     region = img.crop(box)
-
     if new_vertices.size == 0:
         return region, new_vertices
 
-    # 꼭짓점 좌표를 크롭된 영역에 맞게 조정
-    new_vertices[:, [0,2,4,6]] -= start_w
-    new_vertices[:, [1,3,5,7]] -= start_h
-
+    new_vertices[:,[0,2,4,6]] -= start_w
+    new_vertices[:,[1,3,5,7]] -= start_h
     return region, new_vertices
 
 @njit
 def rotate_all_pixels(rotate_mat, anchor_x, anchor_y, length):
-    '''다음 단계에서 사용할 모든 픽셀의 회전된 위치 계산'''
+    '''get rotated locations of all pixels for next stages
+    Input:
+        rotate_mat: rotatation matrix
+        anchor_x  : fixed x position
+        anchor_y  : fixed y position
+        length    : length of image
+    Output:
+        rotated_x : rotated x positions <numpy.ndarray, (length,length)>
+        rotated_y : rotated y positions <numpy.ndarray, (length,length)>
+    '''
     x = np.arange(length)
     y = np.arange(length)
     x, y = np.meshgrid(x, y)
@@ -198,7 +279,6 @@ def rotate_all_pixels(rotate_mat, anchor_x, anchor_y, length):
     return rotated_x, rotated_y
 
 def resize_img(img, vertices, size):
-    '''이미지 크기 조정'''
     h, w = img.height, img.width
     ratio = size / max(h, w)
     if w > h:
@@ -209,7 +289,15 @@ def resize_img(img, vertices, size):
     return img, new_vertices
 
 def adjust_height(img, vertices, ratio=0.2):
-    '''이미지 높이 조정하여 데이터 증강'''
+    '''adjust height of image to aug data
+    Input:
+        img         : PIL Image
+        vertices    : vertices of text regions <numpy.ndarray, (n,8)>
+        ratio       : height changes in [0.8, 1.2]
+    Output:
+        img         : adjusted PIL Image
+        new_vertices: adjusted vertices
+    '''
     ratio_h = 1 + ratio * (np.random.rand() * 2 - 1)
     old_h = img.height
     new_h = int(np.around(old_h * ratio_h))
@@ -222,7 +310,15 @@ def adjust_height(img, vertices, ratio=0.2):
 
 
 def rotate_img(img, vertices, angle_range=5):
-    '''이미지 회전하여 데이터 증강'''
+    '''rotate image [-10, 10] degree to aug data
+    Input:
+        img         : PIL Image
+        vertices    : vertices of text regions <numpy.ndarray, (n,8)>
+        angle_range : rotate range
+    Output:
+        img         : rotated PIL Image
+        new_vertices: rotated vertices
+    '''
     center_x = (img.width - 1) / 2
     center_y = (img.height - 1) / 2
     angle = angle_range * (np.random.rand() * 2 - 1)
@@ -233,7 +329,6 @@ def rotate_img(img, vertices, angle_range=5):
     return img, new_vertices
 
 def generate_roi_mask(image, vertices, labels):
-    '''ROI 마스크 생성'''
     mask = np.ones(image.shape[:2], dtype=np.float32)
     ignored_polys = []
     for vertice, label in zip(vertices, labels):
@@ -243,7 +338,7 @@ def generate_roi_mask(image, vertices, labels):
     return mask
 
 def filter_vertices(vertices, labels, ignore_under=0, drop_under=0):
-    '''텍스트 영역 필터링'''
+
     if drop_under == 0 and ignore_under == 0:
         return vertices, labels
 
@@ -258,31 +353,6 @@ def filter_vertices(vertices, labels, ignore_under=0, drop_under=0):
 
     return new_vertices, new_labels
 
-from albumentations.core.transforms_interface import ImageOnlyTransform
-
-class SaltPepperNoise(ImageOnlyTransform):
-    def __init__(self, amount=0.005, always_apply=False, p=0.5):
-        super(SaltPepperNoise, self).__init__(always_apply=always_apply, p=p)
-        self.amount = amount
-
-    def apply(self, image, **params):
-        row, col, ch = image.shape
-        out = np.copy(image)
-
-        # Salt (흰색 픽셀) 추가
-        num_salt = np.ceil(self.amount * image.size * 0.5)
-        coords = [np.random.randint(0, i - 1, int(num_salt)) for i in image.shape]
-        out[coords[0], coords[1], :] = 255
-
-        # Pepper (검은색 픽셀) 추가
-        num_pepper = np.ceil(self.amount * image.size * 0.5)
-        coords = [np.random.randint(0, i - 1, int(num_pepper)) for i in image.shape]
-        out[coords[0], coords[1], :] = 0
-
-        return out
-
-    def get_transform_init_args_names(self):
-        return ("amount",)
 
 class SceneTextDataset(Dataset):
     def __init__(self, root_dir,
@@ -293,12 +363,14 @@ class SceneTextDataset(Dataset):
                  drop_under_threshold=1,
                  color_jitter=True,
                  normalize=True):
-        self._lang_list = ['chinese', 'japanese', 'thai', 'vietnamese']
+        # 기존 데이터에 한문데이터와 각 언어별 합성 데이터를 추가해서 train
+        self._lang_list = ['chinese', 'japanese', 'thai', 'vietnamese', 'hanja', 'gchinese', 'gjapnese', 'gthai', 'gvietnamese']
+        
         self.root_dir = root_dir
         self.split = split
         total_anno = dict(images=dict())
         for nation in self._lang_list:
-            # 실험을 위해 점선을 지운 json을 활용하고 있습니다.
+            
             with open(osp.join(root_dir, '{}_receipt/ufo/{}.json'.format(nation, split)), 'r', encoding='utf-8') as f:
                 anno = json.load(f)
             for im in anno['images']:
@@ -323,8 +395,18 @@ class SceneTextDataset(Dataset):
             lang = 'thai'
         elif lang_indicator == 'vi':
             lang = 'vietnamese'
+        elif lang_indicator == 'han': # 새롭게 추가한 한문 데이터 
+            lang = 'hanja'
+        elif lang_indicator == 'gzh' : # 합성 이미지 (중국어) 
+            lang = 'gchinese'
+        elif lang_indicator == 'gja':  # 합성 이미지 (일본어) 
+            lang = 'gjapanese'
+        elif lang_indicator == 'gth':  # 합성 이미지 (태국어) 
+            lang = 'gthai'
+        elif lang_indicator == 'gvi':  # 합성 이미지 (베트남어) 
+            lang = 'gvietnamese'
         else:
-            raise ValueError("알 수 없는 언어 인디케이터: {}".format(lang_indicator))
+            raise ValueError("unknown language indicator : {}".format(lang_indicator))
 
         return osp.join(self.root_dir, f'{lang}_receipt', 'img', self.split)
 
@@ -356,8 +438,8 @@ class SceneTextDataset(Dataset):
         image, vertices = adjust_height(image, vertices)
         image, vertices = rotate_img(image, vertices)
 
-        # 중앙 크롭으로 변경
-        image, vertices = crop_img_center(image, vertices, labels, self.crop_size)
+        # center crop 
+        image, vertices = crop_img(image, vertices, labels, self.crop_size)
 
 
         if image.mode != 'RGB':
@@ -369,18 +451,16 @@ class SceneTextDataset(Dataset):
         if self.color_jitter:
             funcs.append(A.ColorJitter())
        
-        funcs.append(A.ToGray(always_apply=True))
-        funcs.append(SaltPepperNoise(amount=0.001, p=0.5))  # salt and pepper 노이즈 추
-        funcs.append(A.GaussianBlur(blur_limit=(1,3), p=0.5)) # Gaussian pepper 추가
+        funcs.append(A.ToGray(always_apply=True)) # rgb -> gray 
+        funcs.append(SaltPepperNoise(amount=0.001, p=0.5)) # salt and pepper noise 추가
+        funcs.append(A.GaussianBlur(blur_limit=(1,3), p=0.5)) # gaussian blur 추가
         
         
         if self.normalize:
             funcs.append(A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
         
-
         transform = A.Compose(funcs)
 
-        # 이미지에 변환을 적용합니다.
         image = transform(image=image)['image']
         word_bboxes = np.reshape(vertices, (-1, 4, 2))
         roi_mask = generate_roi_mask(image, vertices, labels)
