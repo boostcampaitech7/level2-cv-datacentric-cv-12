@@ -2,7 +2,6 @@
 > **'Data Centric**' 관점에서 모델은 VGG 고정하여 진행하였습니다.
 
 이 프로젝트는 카메라로 촬영한 영수증 이미지에서 다국어 텍스트를 검출하는 것을 목표로 합니다. 최근 OCR 기술이 발전하면서 이미지에서 텍스트를 추출하는 다양한 솔루션이 등장했지만, 이 프로젝트에서는 모델 관점이 아닌 데이터 관점에서 문제를 해결하고자 합니다. 데이터를 최적화하여 더욱 정확하고 효율적인 텍스트 검출을 실현하는 것이 이번 프로젝트의 핵심 목표입니다.
-
 <br>
 
 # 💁🏼‍♂️💁‍♀️ Member 소개
@@ -16,14 +15,15 @@
 | **조현준** | - 점선관련 실험 진행 <br>  |
 ---
 
-<br><br>
+<br>
+
 # 🤜 팀의 목표
 - Git issue를 통해 일정 관리를 진행하자!
 - 데이터 관점에서 EDA를 통해 데이터 전처리 를 진행하자!
 - 결과를 시각화 하여 가설을 세우고 이를 검증하자! 
 - 가설 검증시 회의를 통해서 의견을 적극 제시하자!
 
-<br><br>
+<br>
 
 # 🖥️ 프로젝트 진행 환경
 
@@ -39,6 +39,7 @@
 - **Deep Learning Framework**: PyTorch, CUDA 지원 활성화
 
 <br><br>
+
 # 🦂프로젝트 파일 구조
 
 ```
@@ -70,7 +71,7 @@
 | `code/ensemble.py`                   | 여러 모델의 앙상블을 위한 함수가 정의된 파일입니다. |
 | `code/inference.py`                  | 추론을 수행하는 코드가 포함된 파일입니다.           |
 | `code/requirements.txt`              | 프로젝트의 환경 설정과 필요한 패키지 목록 파일입니다. |
-| `code/synthetic_data/`               | 인위적으로 생성된 데이터가 저장된 폴더입니다.        |
+| `code/synthetic_data/`               | 합성 데이터가 저장된 폴더입니다.        |
 | `code/train.py`                      | 모델 학습을 위한 코드가 포함된 파일입니다.           |
 | `code/val_eval.py`                   | Validation 및 평가를 수행하는 파일입니다.           |
 | `readme.md`                          | 프로젝트의 전반적인 정보를 제공하는 문서입니다.     |
@@ -82,13 +83,15 @@
 | `utils/visualize_inference_results.ipynb` | 추론 결과를 시각화하는 노트북 파일입니다.      |
 
 
-<br><br>
-# 🦎필요한 라이브러리 설치
+<br>
+
+# 🧰 필요한 라이브러리 설치
 ```bash
 pip install -r requirements.txt
 ```
 
-<br><br>
+<br>
+
 # 🦅 모델 학습 방법
 *대회 규정상 baseline 코드는 .gitignore에 포함되어 현재 코드에 포함되어있지 않습니다*
 
@@ -133,7 +136,8 @@ nohup을 통해 GPU 서버 background에서 돌리는 경우
 nohup python trian.py --max_epoch 300 --save_interval 20 --project_name "Train Example Project" --run_name 'proejct test run' > test_output.log 2>&1 &
 ```
 
-<br><br>
+<br>
+
 # 🦖 모델 추론 방법
 ### 명령줄 인자 설명
 
@@ -153,9 +157,10 @@ nohup python trian.py --max_epoch 300 --save_interval 20 --project_name "Train E
 ```
 python inference.py --ckpt_path ./checkpoints/model.pth
 ```
+<br>
 
 <br><br>
-# 🦖 앙상블 방법
+# 🦞 앙상블 방법
 ### 명령줄 인자 설명
 
 | 인자명                | 타입      | 기본값                  | 설명 |
@@ -175,19 +180,12 @@ python ensemble.py --mode ensemble --input_dir ./predictions --output_dir ./ense
 ```
 
 # 🦇wandb
-<p align="center">
-  <img src="image-1.png" alt="alt text" width="80%">
-</p>
-
 
 <div align="center">
-  <p>
-    <img src="image-2.png" alt="alt text" width="60%">
-  </p>
-  <p>
-    <img src="image-3.png" alt="alt text" width="60%">
-  </p>
+  <img src="https://github.com/user-attachments/assets/a7f2e722-2a59-49a7-b192-ac3dc7cdd84e" width="80%">
+  <img src="https://github.com/user-attachments/assets/72302db7-1dd2-4a96-a44d-2f03d666a148" width="80%">
 </div>
+
 
 ---
 wandb에서 cls loss, iou loss, angle loss 등을 시각화 하였고, Model에 들어가는 이미지 10장을 랜덤으로 시각화 하여 Data Augmentation이 잘 적용되었는지 시각적으로 확인을 진행하였습니다.
