@@ -28,7 +28,7 @@ def parse_args():
 
     parser.add_argument('--device', default='cuda' if cuda.is_available() else 'cpu')
     parser.add_argument('--input_size', type=int, default=2048)
-    parser.add_argument('--batch_size', type=int, default=5)
+    parser.add_argument('--batch_size', type=int, default=2)
 
     args = parser.parse_args()
 
@@ -38,9 +38,8 @@ def parse_args():
     return args
 
 def remove_shadow(image):
-    """
-    이미지에서 그림자를 제거하는 함수.
-    """
+    # 이미지에서 그림자를 제거해 주는 함수 
+
     # RGB 채널 분리
     rgb_planes = cv2.split(image)
 
@@ -57,25 +56,10 @@ def remove_shadow(image):
     result_norm = cv2.merge(result_planes)
     return result_norm
 
-# def apply_otsu_threshold(gray_image):
-#     """
-#     그레이스케일 이미지에 Otsu의 이진화 적용.
-#     """
-#     _, otsu_image = cv2.threshold(gray_image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-#     return otsu_image
-
-# def apply_clahe(gray_image, clip_limit=2.0, tile_grid_size=(8, 8)):
-#     """
-#     그레이스케일 이미지에 CLAHE를 적용하여 대비를 향상시킵니다.
-#     """
-#     clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
-#     return clahe.apply(gray_image)
-
 def do_inference(model, ckpt_fpath, data_dir, input_size, batch_size, split='test', output_dir='predictions'):
     model.load_state_dict(torch.load(ckpt_fpath, map_location='cpu'))
     model.eval()
 
-    # base_name 정의 (확장자 제거)
     base_name = osp.splitext(osp.basename(ckpt_fpath))[0]
 
     image_fnames, by_sample_bboxes = [], []
