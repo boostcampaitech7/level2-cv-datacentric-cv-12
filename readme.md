@@ -55,7 +55,6 @@
 │   └── val_eval.py
 ├── readme.md
 └── utils
-    ├── EDA.ipynb
     ├── artifacts_download.ipynb
     ├── data_format_processor.py
     ├── filter.ipynb
@@ -76,7 +75,6 @@
 | `code/val_eval.py`                   | Validation 및 평가를 수행하는 파일입니다.           |
 | `readme.md`                          | 프로젝트의 전반적인 정보를 제공하는 문서입니다.     |
 | `utils/`                             | 데이터 처리, 다운로드, 시각화 등의 유틸리티 파일이 모인 디렉토리입니다. |
-| `utils/EDA.ipynb`                    | Exploratory Data Analysis(EDA)를 수행하는 노트북 파일입니다. |
 | `utils/artifacts_download.ipynb`     | 아티팩트를 다운로드하는 노트북 파일입니다.         |
 | `utils/data_format_processor.py`     | 데이터 포맷을 처리하는 스크립트입니다.             |
 | `utils/filter.ipynb`                 | 데이터를 필터링하는 노트북 파일입니다.             |
