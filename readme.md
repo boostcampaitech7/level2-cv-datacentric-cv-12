@@ -7,7 +7,7 @@
 # 💁🏼‍♂️💁‍♀️ Member 소개
 | 이름       | 기여 내용 |
 |------------|-----------|
-| **김한별** | - Augmentation 실험진행  <br>  |
+| **김한별** | - Augmentation 실험진행  <br> - synthetic data 생성 및 실험 |
 | **손지형** | - 외부 데이터셋 실험 <br> - 전이학습 실험 <br> - Augmentation 실험 |
 | **유지환** | - TTA 및 하이퍼 파라미터 조정 실험 진행 <br>  |
 | **장희진** | - Center crop 실험진행 <br> |
