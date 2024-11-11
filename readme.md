@@ -40,19 +40,47 @@
 
 <br><br>
 # 🦂프로젝트 파일 구조
-| Path                                | Description                  |
-|-------------------------------------|------------------------------|
-| `artifacts_download.ipynb`          | artifact를 다운받는 파일 |
-| `code/`                             | 코드들이 저장되어있는 폴더          |
-| ├── `data/`                         | 데이터들이 저장되어있는 폴더               |
-| │   ├── `dataset.py`                | 데이터 Handle 함수들 정의 파일      |
-| │   ├── `deteval.py`                | deteval 파일            |
-| │   ├── `inference.py`              | Inference 파일             |
-| │   ├── `requirements.txt`          | 환경설정 파일          |
-| │   └── `train.py`                  | Training 파일      |
-| `make_json.ipynb`                   | 새로운 json을 만드는 파일   |
-| `readme.md`                         | Project documentation        |
-| `visualization_inference.ipynb`     | 모델의 결과를 시각화 하는 파일 |
+
+```
+├── code
+│   ├── data
+│   ├── dataset.py
+│   ├── deteval.py
+│   ├── ensemble.py
+│   ├── inference.py
+│   ├── requirements.txt
+│   ├── synthetic_data
+│   ├── train.py
+│   └── val_eval.py
+├── readme.md
+└── utils
+    ├── EDA.ipynb
+    ├── artifacts_download.ipynb
+    ├── data_format_processor.py
+    ├── filter.ipynb
+    └── visualize_inference_results.ipynb
+```
+
+| Path                                 | Description                                 |
+|--------------------------------------|---------------------------------------------|
+| `code/`                              | 주요 코드 파일들이 포함된 디렉토리입니다.           |
+| `code/data/`                         | 데이터가 저장되는 디렉토리입니다.                   |
+| `code/dataset.py`                    | 데이터를 처리하고 관리하는 함수들이 정의된 파일입니다. |
+| `code/deteval.py`                    | Detection 평가 관련 로직이 포함된 파일입니다.       |
+| `code/ensemble.py`                   | 여러 모델의 앙상블을 위한 함수가 정의된 파일입니다. |
+| `code/inference.py`                  | 추론을 수행하는 코드가 포함된 파일입니다.           |
+| `code/requirements.txt`              | 프로젝트의 환경 설정과 필요한 패키지 목록 파일입니다. |
+| `code/synthetic_data/`               | 인위적으로 생성된 데이터가 저장된 폴더입니다.        |
+| `code/train.py`                      | 모델 학습을 위한 코드가 포함된 파일입니다.           |
+| `code/val_eval.py`                   | Validation 및 평가를 수행하는 파일입니다.           |
+| `readme.md`                          | 프로젝트의 전반적인 정보를 제공하는 문서입니다.     |
+| `utils/`                             | 데이터 처리, 다운로드, 시각화 등의 유틸리티 파일이 모인 디렉토리입니다. |
+| `utils/EDA.ipynb`                    | Exploratory Data Analysis(EDA)를 수행하는 노트북 파일입니다. |
+| `utils/artifacts_download.ipynb`     | 아티팩트를 다운로드하는 노트북 파일입니다.         |
+| `utils/data_format_processor.py`     | 데이터 포맷을 처리하는 스크립트입니다.             |
+| `utils/filter.ipynb`                 | 데이터를 필터링하는 노트북 파일입니다.             |
+| `utils/visualize_inference_results.ipynb` | 추론 결과를 시각화하는 노트북 파일입니다.      |
+
 
 <br><br>
 # 🦎필요한 라이브러리 설치
